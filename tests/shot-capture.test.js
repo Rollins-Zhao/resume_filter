@@ -43,13 +43,14 @@ check("真实到底对 2px 容差（scrollTop+clientH=scrollH-2）", sc.scrollBo
 check("shotFileName 两位序号", sc.shotFileName("ab12", 3) === "ab12-03.png");
 check("shotFileName 序号进位", sc.shotFileName("ab12", 12) === "ab12-12.png");
 
-// ---- planShots：步长与轮次上限参数（v2.15.0：0.8→0.45 视口，24→48 屏） ----
-// BUG-2026-11-05：719px 单跳让虚拟画布整屏重绘、中间态可见（内容压扁+空白）；拆小步长+双滚轮减半重绘面积。
+// ---- planShots：步长与轮次上限参数（v2.15.1 回滚为 v2.10.0 配置：80% 视口单滚轮） ----
+// v2.15.0 曾改 45%+双滚轮缩短重绘中间态观感；同日确认拉伸属平台本地图形行为、无识别风险（用户查证拍板），
+// 且小步长使张数/OCR 耗时翻倍——回滚为 11 份真机验证的配置。
 const plan = sc.planShots({ canvasH: 900 });
-check("planShots 步长=45%视口（重绘面积减半）", plan.step === 405);
-check("planShots 上限 48 屏（步长变小后承接张数增多）", plan.maxShots === 48);
-check("planShots 视口缺失回落 897", sc.planShots({}).step === Math.round(897 * 0.45));
-check("planShots 步长下限 160（小视口防御）", sc.planShots({ canvasH: 250 }).step === 160);
+check("planShots 步长=80%视口（v2.15.1 回滚，真机验证配置）", plan.step === 720);
+check("planShots 上限 24 屏（v2.15.1 回滚）", plan.maxShots === 24);
+check("planShots 视口缺失回落 897", sc.planShots({}).step === Math.round(897 * 0.8));
+check("planShots 步长下限 200（小视口防御）", sc.planShots({ canvasH: 250 }).step === 200);
 
 // ---- jpegSizeStable：重绘就绪探测的字节稳定判定（P0-2） ----
 check("jpegSizeStable：两次字节数相对变化≤1% 视为稳定", sc.jpegSizeStable(700000, 702000) === true);

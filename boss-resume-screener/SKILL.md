@@ -1,11 +1,11 @@
 ---
 name: boss-resume-screener
-version: 2.15.0
+version: 2.15.1
 description: This skill should be used when bulk-screening candidates or resumes on BOSS直聘 (BOSS Zhipin / zhipin) recruiter platform — searching candidates by keyword groups via `boss hr candidates`, viewing structured resumes via `boss hr resume`, scoring them with the same customizable multi-dimension model as the Liepin skill, and generating a downloadable Excel recommendation report with per-job recommendation dedup (recommended-index.json keeps the same candidate from entering the report twice, skipped ones listed in a second worksheet; the report's BOSS简历 column links to the recruiter's search-results frame URL, keywords = surname+cleaned-company+title). It also covers the unified run.bat entry (platform menu, CDP detection, browser-kernel auto-install), boss-agent-cli (Python/uv) installation, version self-check, login-state recovery, quota discipline and circuit-breaker handling. Read-only by default; since v2.7.0 an explicit opt-in greet phase auto-sends first greetings only to S/A-grade candidates viewed this run, after the user enables settings.greet via two onboarding questions (first BOSS run or --setup-greet; geek-level global dedup, 20/day local cap); it never auto-sends replies, messages, resume requests or contact-exchange requests. Triggers include BOSS筛选, BOSS直聘筛选, 用BOSS筛简历, boss-agent-cli, BOSS候选人推荐报告, BOSS推荐去重, 重复推荐, 已推荐过, 销售经理招聘, BOSS链接打不开.
 agent_created: true
 ---
 
-> 本文件 `version: 2.15.0`（对应发布包版本）。项目根会经 run.bat / `self-update.js` 自动升级（v2.13.0 起，查 GitHub Release）；本 skill 若被单独复制到 `~/.workbuddy/skills/` 等位置、版本低于项目根包内版本时，提醒用户从项目根复制刷新。
+> 本文件 `version: 2.15.1`（对应发布包版本）。项目根会经 run.bat / `self-update.js` 自动升级（v2.13.0 起，查 GitHub Release）；本 skill 若被单独复制到 `~/.workbuddy/skills/` 等位置、版本低于项目根包内版本时，提醒用户从项目根复制刷新。
 
 # BOSS直聘简历自动筛选（只读筛选 + 授权触达）
 
@@ -473,7 +473,7 @@ screener 浏览循环内（同一次浏览动作，配额不额外计费）
   ↓ Network.enable 挂监听（开弹层前——弹层打开瞬间发 geek/info/v2）
   ↓ iBossRoot.resume.newChatResumeViewer 开弹层（15s 未就绪清场重开一次）
   ↓ 滚回顶 → 循环：Page.captureScreenshot（PNG，裁剪弹层矩形每张重算，不含会话列表）
-    → 滚轮推进 45% 视口×2 次小滚（~1.2s/屏 阅读式节奏 + 重绘就绪探测）→ 测 .resume-detail
+    → 滚轮推进一屏-20% 重叠（~1s/屏 阅读式节奏 + 重绘就绪探测）→ 测 .resume-detail
   ↓ 到底判定（v2.15.0 双保险）：真实滚动位置 scrollTop+clientH 覆盖 scrollH，或高度连续 2 次
     不增长且屏数已覆盖（高度仍在涨绝不停）；连续同帧滚动未推进=到底收尾、滚动推进却同帧=中止
   ↓ 回收 geek/info/v2 的 zpData.jobCompetitive（牛人分析器明文）→ 关弹层
@@ -481,7 +481,7 @@ screener 浏览循环内（同一次浏览动作，配额不额外计费）
     （text 默认由本机 RapidOCR 内联识别回填，见下；识别未过校验者 text 留空走 AI 转写兜底）
 ```
 
-**v2.15.0 节奏修正（`BUG-2026-11-05-boss-简历弹层跳动与重绘错位.md`，workbuddy 真机合成器录屏 + 逐帧字节实证）**：用户可见的「弹层一格一格跳、内容压扁在顶部一条+下方空白」是 canvas 自上而下异步**重绘中间态**（落盘图未受损，+100ms 即稳定），但慢机器/窗口被遮挡时可能拍到空白条。四修：① 步长 80%→45% 视口且单步拆 2 次滚轮（重绘面积减半，接近逐段阅读；上限 24→48 屏承接张数增多）；② 固定 sleep 之外加**重绘就绪探测**（低质 JPEG 字节稳定判定，不稳才多等 ≤1.5s）；③ 到底判定升级为读真正滚动容器 `.resume-detail`（旧版读 iframe 文档 scrollTop 恒 0，只能靠高度收敛+屏数推断——平台改版/懒加载变化时会静默拍同屏、OCR 后缺正文不报错）；④ 重复帧防护（滚动推进却同帧=滚动假象/重绘卡死，中止；未推进同帧=到底收尾）+ 截图裁剪矩形每张重算。附带：`fetch-text.js` 的 GEO_JS 不再滚动主页面（旧 `window.scrollBy` 是"整个沟通页跳一下"的来源），复位副作用收敛到弹层容器内。
+**v2.15.0 弹层取文加固（`BUG-2026-11-05-boss-简历弹层跳动与重绘错位.md`，workbuddy 真机合成器录屏 + 逐帧字节实证）**：用户可见的「弹层一格一格跳、内容压扁在顶部一条+下方空白」是 canvas 自上而下异步**重绘中间态**（落盘图未受损，+100ms 即稳定）——属平台本地图形行为，**平台侧不可见、无自动化识别风险**（2026-11-05 用户查证拍板；曾据此改 45% 小步长+双滚轮，**v2.15.1 已回滚**为 v2.10.0 起 11 份真机验证的 80% 视口单滚轮）。保留的加固与观感无关、均为正确性修复：① 固定 sleep 之外加**重绘就绪探测**（低质 JPEG 字节稳定判定，不稳才多等 ≤1.5s——慢机器/遮挡下不拍空白条，0.8 大步长重绘面积更大反而更需要）；② 到底判定升级为读真正滚动容器 `.resume-detail` 的真实 scrollTop（旧版读 iframe 文档 scrollTop 恒 0，只能靠高度收敛+屏数推断——平台改版/懒加载变化时会静默拍同屏、OCR 后缺正文不报错）；③ 重复帧防护（滚动推进却同帧=滚动假象/重绘卡死，中止；未推进同帧=到底收尾）；④ 截图裁剪矩形每张重算。附带：`fetch-text.js` 的 GEO_JS 不再滚动主页面（旧 `window.scrollBy` 是"整个沟通页跳一下"的来源），复位副作用收敛到弹层容器内、并参数化（geoJs(false)）供拖选分段循环不复位。
 
 **转写主通道（v2.10.0 同轮拍板）：本机 RapidOCR 内联识别（零 token、纯本地）**。screener 截图完成后立即 spawn `uv run --with rapidocr-onnxruntime`（`scripts/ocr-local.py`）逐图识别 → `scripts/ocr-local.js` 剥 UI 杂线/截断平台免责声明 → **三层去重组装**（头块剥离=滚轮未推进的整屏重拍块，容错变体行=长行包含关系；边界尾-头精确拼接；≥20 字长行首现去重——2026-10-30 真机 11 份实证滚轮振荡重拍普遍存在，三层组装后内容行重复≈0，残余行重复均为简历自然短词）→ `validateText` 校验（≥120 字符、含章节标记、≤20000）通过即直接回填 `text` ——**快速档筛完直接打分出报告，无转写断点**。首次运行 uv 自动装依赖+模型（~1-2 分钟一次），此后 ~5s/图。`BOSS_OCR=0` 可关断（或 uv/依赖不可用时自动降级）。
 

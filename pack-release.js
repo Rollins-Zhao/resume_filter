@@ -226,7 +226,11 @@ const NAME = "resume-screener";
 //         拆双滚轮、重绘就绪探测（JPEG 字节稳定）、到底判定读 .resume-detail 真实滚动位置、重复帧
 //         防护、clip 每张重算、GEO_JS 不再滚主页面。新增 tests/greet-receipt / greet-ledger，
 //         shot-capture 测试扩至 28 例。
-const DEFAULT_VERSION = "2.15.0";
+// 2.15.1 = 截图步长回滚（2026-11-05 用户查证拍板）：「弹层拉伸/跳动」为平台 canvas 本地重绘中间态、
+//         平台侧不可见（本地图形行为，不构成自动化识别信号），45% 小步长只会使张数/OCR 耗时翻倍——
+//         恢复 v2.10.0 起 11 份真机验证的 80% 视口单滚轮；v2.15.0 的正确性修复（重绘就绪探测/真实
+//         到底判定/重复帧防护/clip 每张重算/GEO_JS 副作用收敛）与观感无关，全部保留。
+const DEFAULT_VERSION = "2.15.1";
 const VERSION = (() => {
   const i = process.argv.indexOf("--version");
   if (i === -1) return DEFAULT_VERSION;

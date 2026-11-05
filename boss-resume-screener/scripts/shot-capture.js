@@ -12,12 +12,15 @@
 // v2.15.0（BUG-2026-11-05 简历弹层跳动/重绘错位，合成器录屏 + 逐帧字节实证）：
 //   - 用户看到的「一格一格跳、内容压扁在顶部一条+下方空白」= canvas 自上而下异步重绘的**中间态**；
 //     落盘图实测未受损（+100ms 即稳定），但重绘窗口客观存在——机器慢/窗口被遮挡时可能拍到空白条。
-//   - P0-1 步长 80%→45% 视口 + 单步拆 2 次滚轮：单次重绘面积减半，中间态缩短，接近逐段阅读；
 //   - P0-2 固定 sleep(1000) 之外加「重绘就绪」探测（低质 JPEG 字节稳定判定）：不稳才多等（≤1.5s）；
 //   - P0-3 到底判定升级：读真正滚动容器 .resume-detail 的 scrollTop（旧版 iframe scrollTop 恒 0，
 //     只能靠高度收敛+屏数推断——平台改容器滚动/懒加载变化时会静默拍同屏、OCR 后缺正文不报错）；
 //   - P1-2 clip 每张重算（重绘期弹层矩形会变）；P1-3 重复帧检测（滚动推进但画面相同 = 卡死中止；
 //     滚动未推进的同帧 = 到底收尾）。
+// v2.15.1（同日回滚 v2.15.0 的步长修改）：「拉伸/跳动」是平台 canvas 本地重绘中间态，只存在于
+//   用户屏幕、平台侧不可见（用户查证无自动化识别风险后拍板回滚）；恢复 v2.10.0 起 11 份真机
+//   验证的 80% 视口单滚轮（45% 步长会使张数/OCR 耗时翻倍）。上述正确性修复（就绪探测/真实到底/
+//   重复帧/clip 重算）与观感无关，全部保留——0.8 大步长的重绘面积更大，就绪探测反而更重要。
 //
 // 语义（与 fetch-text 同款纪律）：
 //   - 任何一步失败 → FatalError 立即中止本轮（不降级、不跳过）；人工回退通道 = BOSS_TEXT_MODE=drag。
@@ -74,13 +77,12 @@ function shotFileName(id, n) {
   return `${String(id).replace(/[^\w.-]/g, "_")}-${String(n).padStart(2, "0")}.png`;
 }
 
-/** 滚动计划（v2.15.0，BUG-2026-11-05 P0-1）：步长 = 视口高 × 45%（重叠 55% 防漏行）。
- *  旧 80%（≈719px）一跳让虚拟画布整屏重绘、中间态可见（合成器录屏实证：内容压扁在顶部
- *  120-220px 一条、下方 600px+ 空白）；拆小步长后单次重绘面积约减半。上限 24→48 屏承接
- *  张数增多（步长变小后同内容高需更多屏，≈8600px→19 屏仍在界内）。 */
+/** 滚动计划（v2.15.1 回滚为 v2.10.0 配置）：步长 = 视口高 × 80%（20% 重叠防漏行），上限 24 屏
+ *  （≈8600px 内容，防御性封顶）。v2.15.0 曾改 45%+双滚轮以缩短重绘中间态观感——后确认拉伸属
+ *  平台本地图形行为、无识别风险（2026-11-05 用户查证拍板），且小步长使张数/OCR 耗时翻倍，回滚。 */
 function planShots({ canvasH } = {}) {
   const viewH = Number(canvasH) > 200 ? Number(canvasH) : 897;
-  return { viewH, step: Math.max(160, Math.round(viewH * 0.45)), maxShots: 48 };
+  return { viewH, step: Math.max(200, Math.round(viewH * 0.8)), maxShots: 24 };
 }
 
 /** 重绘就绪的字节稳定判定（P0-2）：两次低质 JPEG 字节数相对变化 ≤1%（或差 ≤1 字节）视为同一画面。
@@ -248,7 +250,7 @@ async function captureResumeShots({ geekId, jobId, securityId, outDir, logger = 
     } catch { /* 矩形拿不到 → 全视口兜底 */ }
     log(`    [截图] ${clip ? `裁剪弹层矩形 ${clip.width}×${clip.height}（不含会话列表）` : "弹层矩形不可用，全视口截图"} · 视口高 ${plan.viewH}px · 步长 ${plan.step}px`);
 
-    // 4. 截图主循环（v2.15.0 节奏）：拍（clip 每张重算 + 重复帧裁决）→ 滚半屏×2 → 阅读式停顿 →
+    // 4. 截图主循环：拍（clip 每张重算 + 重复帧裁决）→ 滚一屏(-20% 重叠) → 阅读式停顿 →
     //    重绘就绪探测 → 测高；真实到底（scrollTop+clientH）或高度收敛且覆盖足够屏数 = 到底。
     //    失败清理（终审 M-3）：中途熔断时删除本次已写盘的图片——无缓存引用的孤儿 PNG 是无索引 PII，不留。
     const dir = path.join(outDir, SHOT_DIR);
@@ -297,12 +299,9 @@ async function captureResumeShots({ geekId, jobId, securityId, outDir, logger = 
           log(`    [截图] 已达单份上限 ${plan.maxShots} 张，停止（超长简历如仍缺尾部，反馈调大 planShots.maxShots）`);
           break;
         }
-        // P0-1：单步拆 2 次小滚轮（间隔 80ms）——旧 719px 一跳触发整屏重绘、用户可见「内容压扁在
-        // 顶部一条+下方空白」的中间态（BUG-2026-11-05 合成器录屏实证）；拆半后重绘面积约减半。
-        for (let k = 0; k < 2; k++) {
-          await call("Input.dispatchMouseEvent", { type: "mouseWheel", x: gw.x, y: wheelY, deltaX: 0, deltaY: Math.round(plan.step / 2) });
-          await sleep(80);
-        }
+        // 滚一屏（-20% 重叠）。v2.15.0 曾拆 2 次半屏小滚轮缩短重绘中间态，v2.15.1 回滚（无识别
+        // 风险 + 张数/OCR 耗时翻倍，见 planShots 注释）——单滚轮 80% 视口为 v2.10.0 起真机验证配置。
+        await call("Input.dispatchMouseEvent", { type: "mouseWheel", x: gw.x, y: wheelY, deltaX: 0, deltaY: plan.step });
         await sleep(DWELL_MS);
         // P0-2：重绘就绪探测——DWELL 停顿后画面仍未稳定（慢机器/窗口被遮挡）时最多再多等 1.5s，
         // 不稳不报错按原节奏拍（重复帧检测是第二道网）。稳态下一次比较即过，零额外开销。
