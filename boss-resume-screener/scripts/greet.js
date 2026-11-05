@@ -21,6 +21,13 @@
 //   ② 发送前预检：拉一次沟通列表——账本 pending（上轮待核实）命中即补记，sendList 已有同话术
 //      会话者跳过（防重复触达硬保险）；
 //   ③ UNVERIFIED 落账本 pending（markPending：不占额度、命中去重阻断重发），报告标「待核实」。
+// v2.15.0（BUG-2026-11-05 假成功与核实失效，三件套）：
+//   ① 回查单请求（--summary-limit 0，见 greet-verify.js）——100 的逐会话补拉把一次回查放大成
+//      ≥3 次串行请求，必然撞穿 30s 预算 → 恒 UNVERIFIED 且无法自证（本次实证根因）；
+//   ② ALREADY_GREETED 幂等码识别（greet-receipt.js → already）：不重试、不占额度、落账本
+//      markAlready——此前按失败提示「下次可重试」，用户照做只会无限撞墙；
+//   ③ NOT_DELIVERED（回查成功但无会话 = 假成功铁证）首人即中止整轮并提示重新扫码——旧会话
+//      失效下连续跑会产出一串假成功（本次 15:41–15:57 实证），重扫码后同链路立即投递成功。
 // 试水参数（M1–M3 里程碑用）：--dry（零发送零网络，打印名单+参数+话术）；--only <id>（单人）；--limit n。
 // 运行产物：data/greet-run.json（本轮逐人状态，report.js「打招呼」列读取；与全局账本 greet-ledger 职责正交）。
 const fs = require("fs");
@@ -284,13 +291,14 @@ function writeRunSummary(meta = {}) {
   //      ② sendList 中已存在同话术会话者 → 跳过发送（防重复触达的硬保险——UNVERIFIED 不记账时代的
   //        结构性风险兜底）。best-effort：快照拉取失败仅提示不阻塞（账本去重仍在，平台「首条招呼
   //        唯一性」是最后一道兜底，2026-11-03 实证两轮发送只送达 1 条）。
-  //      ⚠️ 匹配为话术前 24 字文本匹配（同模板同 dim 组合的撞词局限见 greet-verify.js 头注）。----
+  //      ⚠️ 匹配为话术前 24 字文本匹配（同模板同 dim 组合的撞词局限见 greet-verify.js 头注；
+  //        v2.15.0 起同时匹配原文与 HTML 转义版——话术含 & < > 时 JSON 串里是 &amp; 等形式）。----
   console.log("[greet] 预检：沟通列表快照（防重复触达）…");
   const snapshot = gverify.chatSnapshotText({ runBossFn: (args, opts) => runBoss(args, { ...opts, bin: cfg.bossBin }), logger });
   if (snapshot) {
     let backfilled = 0;
     for (const [gk, e] of Object.entries(gl.loadLedger(GQ_DIR).geeks)) {
-      if (e && e.status === "unverified" && e.msg && snapshot.includes(e.msg)) {
+      if (e && e.status === "unverified" && e.msg && gverify.containsSnippet(snapshot, e.msg)) {
         gl.chargeGreet(GQ_DIR, e.jobKey || JOB_KEY, gk, { jobId: e.jobId || "", name: e.name || "" });
         backfilled++;
         const row = RUN_OUTCOMES.find((o) => o.geekId === gk && o.status === "dup");
@@ -299,8 +307,8 @@ function writeRunSummary(meta = {}) {
       }
     }
     const stillPending = Object.values(gl.loadLedger(GQ_DIR).geeks).filter((e) => e && e.status === "unverified").length;
-    if (stillPending) console.log(`  [预检] 仍有 ${stillPending} 人待核实（沟通列表未见其话术，请人工确认后再决定是否补发；本工具已阻断自动重发）`);
-    const dupIds = new Set(sendList.filter(({ msg }) => snapshot.includes(gverify.snippetOf(msg))).map(({ p }) => p.id));
+    if (stillPending) console.log(`  [预检] 仍有 ${stillPending} 人待核实（沟通列表未见其话术，请人工确认后再决定是否补发；本工具已阻断自动重发；超 6h 自动允许重试）`);
+    const dupIds = new Set(sendList.filter(({ msg }) => gverify.containsSnippet(snapshot, gverify.snippetOf(msg))).map(({ p }) => p.id));
     if (dupIds.size) {
       for (let i = sendList.length - 1; i >= 0; i--) {
         if (!dupIds.has(sendList[i].p.id)) continue;
@@ -375,8 +383,8 @@ function writeRunSummary(meta = {}) {
       // v2.9.0：回执裁决统一走 greet-receipt.js（BUG-2026-10-30 BUG-3）——GREET_RESULT_UNKNOWN
       // 不再直接判失败：CLI 回执两头不可信（UNKNOWN 时消息可能实际已送达，2026-10-29 王海洋实证），
       // 必须与 ok 同路走 hr chat 回查，查到会话即视为送达并入账（防漏账 → 下轮对同一人重发）。
-      // 「已打过招呼/已存在会话」的幂等返回码仍未实测（feature-greet.md §12）：其他非 ok 一律按失败、
-      // 不进账本（下次可重试）；拿到真实幂等码后在 greet-receipt.js 补分支。
+      // v2.15.0：ALREADY_GREETED 幂等码已实测并补分支（greet-receipt.js → status "already"，
+      // 2026-11-05 BUG 实证）；其余非 ok 仍按失败、不进账本（下次可重试）。
       const verdict = await resolveSendReceipt({ r, msg, logger, verify: verifyFn });
       if (verdict.status === "sent") {
         gl.chargeGreet(GQ_DIR, JOB_KEY, p.geekId, { jobId: p.jobId, name: p.name });
@@ -384,6 +392,13 @@ function writeRunSummary(meta = {}) {
         sentCount++;
         consecutiveFails = 0;
         console.log(`    已发送（已回查沟通列表核实${r.ok === true ? "" : "；回执 UNKNOWN 但会话在，按送达入账"}）`);
+      } else if (verdict.status === "already") {
+        // v2.15.0：ALREADY_GREETED 是幂等成功——平台已记账，重发永远撞同一码；不占额度、
+        // 不进熔断计数。落账本 markAlready 防再撞；沟通列表若无人会话请人工确认（会话失效期
+        // 的假成功也占平台账，2026-11-05 实证）。
+        gl.markAlready(GQ_DIR, p.geekId, { jobId: p.jobId, name: p.name, msg, jobKey: JOB_KEY });
+        RUN_OUTCOMES.push({ id: p.id, geekId: p.geekId, name: p.name || p.id, grade: finalGrade(p), status: "already", code: "ALREADY_GREETED" });
+        console.log(`    平台已招呼过此人（ALREADY_GREETED，平台侧已记账）——不重试、不占额度；若沟通列表无此人会话，请人工确认`);
       } else if (verdict.why === "UNVERIFIED") {
         // v2.12.0：回查失败≠未发送——落 pending 阻断自动重发（不占额度），下轮预检核实或人工确认。
         // 2026-11-03 实证：回执 ok 且消息实际送达，但回查被 CLI 预算冷却拦死 → 不记账会导致下轮重发。
@@ -393,11 +408,18 @@ function writeRunSummary(meta = {}) {
         console.log(`    发送回执 ok 但回查失败（${verdict.lastCode || "查询异常"}）——已记「待核实」防重发（下轮预检自动核实/请人工在沟通列表确认）；连续失败 ${consecutiveFails}`);
       } else {
         RUN_OUTCOMES.push({ id: p.id, geekId: p.geekId, name: p.name || p.id, grade: finalGrade(p), status: "failed", code: verdict.why });
+        if (verdict.why === "NOT_DELIVERED") {
+          // v2.15.0（BUG-2026-11-05 P0-3/P1-2）：NOT_DELIVERED = 回查**查询成功**但沟通列表无会话——
+          // 假成功铁证（不记账、可重试），且高度指向会话/登录态失效（旧 Cookie 下写接口被平台静默
+          // 丢弃，重扫码即愈）。首人出现即中止整轮：继续跑只会产出一串假成功 + pending 污染账本。
+          console.log(`    ⚠️ ${r.ok === true ? "接口回执成功但沟通列表无此会话（假成功，不记账）" : "回执未确认且沟通列表无此会话（不记账）"}`);
+          console.log(`    ⚠️ 会话/登录态大概率已失效（2026-11-05 实证：重新扫码后同链路立即投递成功）——本轮立即中止`);
+          console.log(`    请重新扫码（boss login --cdp --force，或双击 boss-edge-login.bat / boss-zhipin-login.bat）后再跑`);
+          stopReason = "session-invalid";
+          break;
+        }
         consecutiveFails++;
-        const tip = verdict.why === "NOT_DELIVERED"
-          ? `⚠️ ${r.ok === true ? "接口回执成功但沟通列表无此会话（假成功，2026-10-29 同款）" : "回执未确认且沟通列表无此会话"}，不记账`
-          : `回执 ${verdict.why}`;
-        console.log(`    ${tip}——下次可重试；连续失败 ${consecutiveFails}`);
+        console.log(`    回执 ${verdict.why}——下次可重试；连续失败 ${consecutiveFails}`);
       }
     } catch (e) {
       if (e instanceof RateLimited) {
@@ -423,7 +445,7 @@ function writeRunSummary(meta = {}) {
   }
   // 中断/熔断时，剩余名单显式记状态（不猜测、不静默；throw 路径已在 catch 内提前 markRest）
   if (stopReason) {
-    markRest(`本轮${stopReason === "window" ? "到工作时间窗外" : stopReason === "rate" ? "触发频率限制" : "连续失败熔断"}未发`);
+    markRest(`本轮${stopReason === "window" ? "到工作时间窗外" : stopReason === "rate" ? "触发频率限制" : stopReason === "session-invalid" ? "会话失效（假成功铁证，请重新扫码后再跑）" : "连续失败熔断"}未发`);
   }
   if (guard) guard.stop(); // 关守护 WebSocket（不关会挂住进程退出）
 

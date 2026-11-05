@@ -9,9 +9,19 @@
 // 同时补「牛人分析器」：弹层打开时页面会发 geek/info/v2 XHR，其 zpData.jobCompetitive 是明文
 //（截图拿不到的网络层增值信息，零 token）——开弹层前挂 Network 监听顺手回收。
 //
+// v2.15.0（BUG-2026-11-05 简历弹层跳动/重绘错位，合成器录屏 + 逐帧字节实证）：
+//   - 用户看到的「一格一格跳、内容压扁在顶部一条+下方空白」= canvas 自上而下异步重绘的**中间态**；
+//     落盘图实测未受损（+100ms 即稳定），但重绘窗口客观存在——机器慢/窗口被遮挡时可能拍到空白条。
+//   - P0-1 步长 80%→45% 视口 + 单步拆 2 次滚轮：单次重绘面积减半，中间态缩短，接近逐段阅读；
+//   - P0-2 固定 sleep(1000) 之外加「重绘就绪」探测（低质 JPEG 字节稳定判定）：不稳才多等（≤1.5s）；
+//   - P0-3 到底判定升级：读真正滚动容器 .resume-detail 的 scrollTop（旧版 iframe scrollTop 恒 0，
+//     只能靠高度收敛+屏数推断——平台改容器滚动/懒加载变化时会静默拍同屏、OCR 后缺正文不报错）；
+//   - P1-2 clip 每张重算（重绘期弹层矩形会变）；P1-3 重复帧检测（滚动推进但画面相同 = 卡死中止；
+//     滚动未推进的同帧 = 到底收尾）。
+//
 // 语义（与 fetch-text 同款纪律）：
 //   - 任何一步失败 → FatalError 立即中止本轮（不降级、不跳过）；人工回退通道 = BOSS_TEXT_MODE=drag。
-//   - 截图节奏 = 阅读式慢滚（~1s/屏），比拖选的机械快滚更像真人；简历间间隔不动（config.intervals）。
+//   - 截图节奏 = 阅读式慢滚（~1s/屏 + 就绪探测），比拖选的机械快滚更像真人；简历间间隔不动（config.intervals）。
 // 红线：截图含更多 PII（含照片）——仅落本机数据目录、报告不嵌图、测完即删、不外发。
 const fs = require("fs");
 const path = require("path");
@@ -24,6 +34,11 @@ const SHOT_DIR = "扫描图"; // 数据目录下的图片子目录（resumes/<id
 const DWELL_MS = 1000; // 每屏停留（阅读式节奏；也给懒渲染追上来的时间——S1 顺带验证封顶是否自愈）
 const INSIGHT_URL_MARK = "/wapi/zpjob/view/geek/info/v2";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// ---------- v2.15.0 重绘就绪探测（P0-2）----------
+const STABLE_POLL_MS = 120; // 探测轮询间隔
+const STABLE_MAX_MS = 1500; // 探测上限：超限按原节奏继续拍（重复帧检测兜底），不无限等
+const STABLE_JPEG_QUALITY = 30; // 低质 JPEG：只为比字节数，不要画质
 
 // ---------- 纯函数（单测覆盖：tests/shot-capture.test.js） ----------
 /** geek/info/v2 响应体 → { insight, plainKeys }：insight=牛人分析器明文（≤500 字符）；
@@ -39,10 +54,17 @@ function parseInsightBody(bodyText) {
   return out;
 }
 
-/** 底部判定：内容高度连续 2 次测量不增长（懒渲染收敛）且已拍屏数足以覆盖内容高度。
+/** 底部判定（v2.15.0 双保险）：
+ *  ① 真实到底——滚动容器 scrollTop+clientH 覆盖 scrollH（±2px 容差；MEASURE_JS 读 .resume-detail，
+ *    旧版读 iframe 文档 scrollTop 恒 0 拿不到真实位置，BUG-2026-11-05 P0-3）；
+ *  ② 回退——高度连续 2 次不增长（懒渲染收敛）且已拍屏数足以覆盖内容高度（scrollTop 不可用时）。
  *  高度仍在涨（stable<2）绝不停——懒渲染封顶真伪就靠这里不误停（首测 scrollH 从 150 涨到 4626）。 */
-function scrollBottomReached({ stable, scrollH, viewH, step, shotsTaken }) {
+function scrollBottomReached({ stable, scrollH, scrollTop, clientH, viewH, step, shotsTaken }) {
   if (!stable || stable < 2) return false;
+  const st = Number(scrollTop), ch = Number(clientH);
+  if (Number.isFinite(st) && Number.isFinite(ch) && ch > 0) {
+    if (st + ch >= (Number(scrollH) || 0) - 2) return true;
+  }
   const need = 1 + Math.max(0, Math.ceil(((Number(scrollH) || 0) - (Number(viewH) || 0)) / (Number(step) || 1)));
   return shotsTaken >= need;
 }
@@ -52,10 +74,34 @@ function shotFileName(id, n) {
   return `${String(id).replace(/[^\w.-]/g, "_")}-${String(n).padStart(2, "0")}.png`;
 }
 
-/** 滚动计划：步长 = 视口高 × 80%（20% 重叠防漏行），上限 24 屏（≈8600px 内容，防御性封顶） */
+/** 滚动计划（v2.15.0，BUG-2026-11-05 P0-1）：步长 = 视口高 × 45%（重叠 55% 防漏行）。
+ *  旧 80%（≈719px）一跳让虚拟画布整屏重绘、中间态可见（合成器录屏实证：内容压扁在顶部
+ *  120-220px 一条、下方 600px+ 空白）；拆小步长后单次重绘面积约减半。上限 24→48 屏承接
+ *  张数增多（步长变小后同内容高需更多屏，≈8600px→19 屏仍在界内）。 */
 function planShots({ canvasH } = {}) {
   const viewH = Number(canvasH) > 200 ? Number(canvasH) : 897;
-  return { viewH, step: Math.max(200, Math.round(viewH * 0.8)), maxShots: 24 };
+  return { viewH, step: Math.max(160, Math.round(viewH * 0.45)), maxShots: 48 };
+}
+
+/** 重绘就绪的字节稳定判定（P0-2）：两次低质 JPEG 字节数相对变化 ≤1%（或差 ≤1 字节）视为同一画面。
+ *  双双为空视为稳定（无数据不阻塞）；其一为空不稳定（画面刚出现/刚消失）。 */
+function jpegSizeStable(a, b) {
+  const x = Number(a) || 0, y = Number(b) || 0;
+  if (!x && !y) return true;
+  if (!x || !y) return false;
+  return Math.abs(x - y) <= Math.max(1, Math.round(Math.max(x, y) * 0.01));
+}
+
+/** 重复帧裁决（P1-3，防「静默拍 N 张同图、OCR 去重后正文缺失不报错」）：
+ *  sameBytes=与上一张字节完全相同（PNG 同画面同字节）时——
+ *    滚动位置已推进（>+2px）→ "dup-stuck"（滚动假象/重绘卡死，异常中止）；
+ *    滚动未推进           → "dup-bottom"（已到底，丢弃重复帧正常收尾）；
+ *  字节不同 → null（正常继续）。位置缺失按到底收尾（防御，不误杀）。 */
+function judgeDuplicateFrame({ sameBytes, prevPos, curPos }) {
+  if (!sameBytes) return null;
+  const a = Number(prevPos), b = Number(curPos);
+  if (Number.isFinite(a) && Number.isFinite(b) && b > a + 2) return "dup-stuck";
+  return "dup-bottom";
 }
 
 // ---------- 页面侧脚本 ----------
@@ -97,6 +143,36 @@ const DIALOG_RECT_JS = `(function(){
   var x = Math.max(0, Math.floor(r.left)), y = Math.max(0, Math.floor(r.top));
   return { x: x, y: y, width: Math.min(Math.ceil(r.right), vw) - x, height: Math.min(Math.ceil(r.bottom), vh) - y };
 })()`;
+
+/** 重绘就绪探测（P0-2）：每 STABLE_POLL_MS 截一张低质 JPEG 比较字节数，连续 2 次稳定即认为
+ *  重绘完成。固定 sleep 是「猜」（实测好机器 100ms 够、慢机器/被遮挡可能不够——一旦不够就拍到
+ *  空白条帧）；这里只在真不稳时多花时间（稳态下一次比较即过），上限 STABLE_MAX_MS 兜底后按原
+ *  节奏继续拍（重复帧检测是第二道网）。返回是否稳定（false 不报错——探测失败不阻塞主流程）。 */
+async function waitRedrawStable(call, clip) {
+  const t0 = Date.now();
+  let prev = 0;
+  let stableCnt = 0;
+  while (Date.now() - t0 < STABLE_MAX_MS) {
+    let size = 0;
+    try {
+      const s = await call("Page.captureScreenshot", {
+        format: "jpeg", quality: STABLE_JPEG_QUALITY,
+        ...(clip ? { clip: { x: clip.x, y: clip.y, width: clip.width, height: clip.height, scale: 1 } } : {}),
+      });
+      size = ((s && s.result && s.result.data) || "").length;
+    } catch {
+      return false; // 探测通道异常：不阻塞，按原节奏拍
+    }
+    if (jpegSizeStable(prev, size)) {
+      if (++stableCnt >= 2) return true;
+    } else {
+      stableCnt = 0;
+    }
+    prev = size;
+    await sleep(STABLE_POLL_MS);
+  }
+  return false;
+}
 
 // ---------- 主入口 ----------
 /**
@@ -172,7 +248,8 @@ async function captureResumeShots({ geekId, jobId, securityId, outDir, logger = 
     } catch { /* 矩形拿不到 → 全视口兜底 */ }
     log(`    [截图] ${clip ? `裁剪弹层矩形 ${clip.width}×${clip.height}（不含会话列表）` : "弹层矩形不可用，全视口截图"} · 视口高 ${plan.viewH}px · 步长 ${plan.step}px`);
 
-    // 4. 截图主循环：拍 → 滚一屏(-20% 重叠) → 阅读式停顿 → 测高；高度收敛且覆盖足够屏数 = 到底
+    // 4. 截图主循环（v2.15.0 节奏）：拍（clip 每张重算 + 重复帧裁决）→ 滚半屏×2 → 阅读式停顿 →
+    //    重绘就绪探测 → 测高；真实到底（scrollTop+clientH）或高度收敛且覆盖足够屏数 = 到底。
     //    失败清理（终审 M-3）：中途熔断时删除本次已写盘的图片——无缓存引用的孤儿 PNG 是无索引 PII，不留。
     const dir = path.join(outDir, SHOT_DIR);
     fs.mkdirSync(dir, { recursive: true });
@@ -181,7 +258,17 @@ async function captureResumeShots({ geekId, jobId, securityId, outDir, logger = 
       let scrollH = ((await ev(MEASURE_JS)) || {}).scrollH || 0;
       let stable = 0;
       const t0 = Date.now();
+      let prevShotBuf = null; // P1-3：上一张字节（Buffer.equals ≙ md5 相同）
+      let prevShotPos = 0; // 上一张拍摄时的滚动位置（pos_{k-2}）
+      let curPos = 0; // 本张拍摄时的滚动位置（上轮滚后 MEASURE 的 scrollTop；首张 0=顶部）
       for (let n = 1; n <= plan.maxShots; n++) {
+        // P1-2：clip 每张重算——重绘期弹层矩形可能变化，循环前的旧 clip 会裁错位（BUG-2026-11-05）。
+        if (n > 1) {
+          try {
+            const dr = await ev(DIALOG_RECT_JS);
+            if (dr && !dr.err && dr.width >= 300) clip = dr;
+          } catch { /* 拿不到沿用上一张 */ }
+        }
         const shot = await call("Page.captureScreenshot", {
           format: "png",
           ...(clip ? { clip: { x: clip.x, y: clip.y, width: clip.width, height: clip.height, scale: 1 } } : {}),
@@ -190,15 +277,36 @@ async function captureResumeShots({ geekId, jobId, securityId, outDir, logger = 
         // 少包一层 result 拿到 undefined，误报「未返回图像数据」（与 ev() 的 result.result.value 同款坑）
         const b64 = shot && shot.result && shot.result.data;
         if (!b64) throw new FatalError("Page.captureScreenshot 未返回图像数据（截图通道疑似不可用）——中止；可用 BOSS_TEXT_MODE=drag 回退拖选通道重跑");
+        const buf = Buffer.from(b64, "base64");
+        // P1-3：重复帧裁决（写盘前，重复帧不落盘）——滚动推进但画面相同 = 滚动假象/重绘卡死（中止，
+        // 防 OCR 去重后静默缺正文）；滚动未推进的同帧 = 已到底（丢弃重复帧收尾）。
+        const dup = judgeDuplicateFrame({ sameBytes: !!(prevShotBuf && buf.equals(prevShotBuf)), prevPos: prevShotPos, curPos });
+        if (dup === "dup-stuck") {
+          throw new FatalError(`第 ${n} 张与上一张画面完全相同，但滚动位置已从 ${prevShotPos}px 推进到 ${curPos}px——滚动假象或画布重绘卡死，中止本份（防 OCR 去重后静默缺正文）`);
+        }
+        if (dup === "dup-bottom") {
+          log(`    [截图] 第 ${n} 张与上一张相同且滚动已到头（${curPos}px）——判定到底，丢弃重复帧，共 ${images.length} 张`);
+          break;
+        }
         const rel = `${SHOT_DIR}${path.sep}${shotFileName(geekId, n)}`;
-        fs.writeFileSync(path.join(outDir, rel), Buffer.from(b64, "base64"));
+        fs.writeFileSync(path.join(outDir, rel), buf);
         images.push(rel);
+        prevShotBuf = buf;
+        prevShotPos = curPos;
         if (n === plan.maxShots) {
           log(`    [截图] 已达单份上限 ${plan.maxShots} 张，停止（超长简历如仍缺尾部，反馈调大 planShots.maxShots）`);
           break;
         }
-        await call("Input.dispatchMouseEvent", { type: "mouseWheel", x: gw.x, y: wheelY, deltaX: 0, deltaY: plan.step });
+        // P0-1：单步拆 2 次小滚轮（间隔 80ms）——旧 719px 一跳触发整屏重绘、用户可见「内容压扁在
+        // 顶部一条+下方空白」的中间态（BUG-2026-11-05 合成器录屏实证）；拆半后重绘面积约减半。
+        for (let k = 0; k < 2; k++) {
+          await call("Input.dispatchMouseEvent", { type: "mouseWheel", x: gw.x, y: wheelY, deltaX: 0, deltaY: Math.round(plan.step / 2) });
+          await sleep(80);
+        }
         await sleep(DWELL_MS);
+        // P0-2：重绘就绪探测——DWELL 停顿后画面仍未稳定（慢机器/窗口被遮挡）时最多再多等 1.5s，
+        // 不稳不报错按原节奏拍（重复帧检测是第二道网）。稳态下一次比较即过，零额外开销。
+        await waitRedrawStable(call, clip);
         const m = await ev(MEASURE_JS);
         // 终审 I-1（Important）：弹层中途消失（用户手关/平台移除）时 MEASURE 返回 err——原逻辑静默继续，
         // 会对底层沟通页（含其他候选人会话）连拍 bogus 图还以「成功」返回。err 即中止本份。
@@ -206,10 +314,11 @@ async function captureResumeShots({ geekId, jobId, securityId, outDir, logger = 
           throw new FatalError(`简历弹层在采集中途不可用（${(m && m.err) || "无响应"}）——可能被手动关闭或平台移除，中止本份`);
         }
         const h = m.scrollH || 0;
+        curPos = Number(m.scrollTop) || 0;
         stable = h <= scrollH + 2 ? stable + 1 : 0;
         scrollH = Math.max(scrollH, h);
-        if (scrollBottomReached({ stable, scrollH, viewH: plan.viewH, step: plan.step, shotsTaken: n })) {
-          log(`    [截图] 滚动到底：内容高 ${scrollH}px 收敛，共 ${n} 张`);
+        if (scrollBottomReached({ stable, scrollH, scrollTop: m.scrollTop, clientH: m.clientH, viewH: plan.viewH, step: plan.step, shotsTaken: n })) {
+          log(`    [截图] 滚动到底：内容高 ${scrollH}px 收敛（滚动位置 ${curPos}px），共 ${n} 张`);
           break;
         }
       }
@@ -258,4 +367,7 @@ async function captureResumeShots({ geekId, jobId, securityId, outDir, logger = 
   }
 }
 
-module.exports = { captureResumeShots, parseInsightBody, scrollBottomReached, shotFileName, planShots };
+module.exports = {
+  captureResumeShots, parseInsightBody, scrollBottomReached, shotFileName, planShots,
+  jpegSizeStable, judgeDuplicateFrame,
+};

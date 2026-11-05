@@ -211,6 +211,7 @@ const pick = (obj, keys) => {
     sent: "已发送(已核验)",
     "sent-backfill": "已发送(上轮待核实·本轮补记)",
     unverified: "待核实(已防重发,请人工确认)",
+    already: "平台已招呼(无会话请人工确认)", // v2.15.0：ALREADY_GREETED 幂等码——平台侧已记账，重试无意义
     "dup-existing": "跳过·会话已存在",
     dry: "演练(未发送)",
     "manual-required": "未发(需手动)",

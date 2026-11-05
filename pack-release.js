@@ -219,7 +219,14 @@ const NAME = "resume-screener";
 //           不加」；推荐源 hr recommendations 无筛选参数（CLI v3.2.0 帮助实证），文档写明不对称。
 //           ②两侧 report.js：学历缺失明示「未知(缺失)」且 minDegree 硬筛不误剔未知者（v2.10.0 遗留缺口：
 //           BOSS 搜索卡 geekDegree 缺失被当最低档错杀）。新增 tests/platform-prefilter.test.js 10 例。
-const DEFAULT_VERSION = "2.14.0";
+// 2.15.0 = workbuddy 反馈两 BUG 修复（2026-11-05，均真机实证）：①greet 假成功与核实失效——回查改
+//         单请求（--summary-limit 0，100 的逐会话补拉必撞 30s 预算→恒 UNVERIFIED）；识别幂等码
+//         ALREADY_GREETED（already：不重试不占额度）；NOT_DELIVERED 首人即中止整轮并提示重新扫码；
+//         unverified 账本加 6h TTL；匹配加 HTML 转义版。②截图弹层跳动/重绘错位——步长 80%→45% 视口
+//         拆双滚轮、重绘就绪探测（JPEG 字节稳定）、到底判定读 .resume-detail 真实滚动位置、重复帧
+//         防护、clip 每张重算、GEO_JS 不再滚主页面。新增 tests/greet-receipt / greet-ledger，
+//         shot-capture 测试扩至 28 例。
+const DEFAULT_VERSION = "2.15.0";
 const VERSION = (() => {
   const i = process.argv.indexOf("--version");
   if (i === -1) return DEFAULT_VERSION;

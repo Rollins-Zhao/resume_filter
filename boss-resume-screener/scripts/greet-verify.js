@@ -11,8 +11,16 @@
 // 本模块适配：首轮前等 40s（越过发送的预算坑）、轮间隔 45s（>30s 最小间隔+余量）、
 // 单次进程超时 150s（让 CLI 在预算内等完而不是被我们杀掉）、预算错误按 retry_after 等待。
 //
+// v2.15.0（BUG-2026-11-05 假成功与核实失效）：回查必须**单请求**——`--summary-limit 100` 的语义
+//   是「给前 100 个会话逐个补最近消息，每 50 个一次串行请求」，一次回查 = 列表 1 次 + 补拉 ≥2 次，
+//   每次都撞 30s 预算排队，第二个请求即 REQUEST_BUDGET_EXHAUSTED → 三轮全 unknown → 恒 UNVERIFIED。
+//   实测反证：`--summary-limit 0` 单次请求即成功，且列表响应自带 last_msg（summary_source:"page"），
+//   补拉完全没必要。改 0 后回查在 1 次请求内出结果。
+//
 // ⚠️ 匹配器局限（待真机样本升级）：hr chat 回包结构无存档样本，沿用「沟通列表全文含话术
 // snippet」匹配；snippet 取前 24 字（覆盖模板 dim1/dim2 差异位，降低同模板候选人互相误命中）。
+// v2.15.0 防御：话术含 & < > 时 JSON 串里是转义形式（&amp; 等），纯原文 includes 会漏——
+// envelopeContains/containsSnippet 同时匹配原文与转义版（不猜结构，纯字符串防御）。
 // 同画像同 dim 组合的极端撞词仍可能误判，下次真机运行应存一份回包样本把匹配器升级为
 // 「按 geek 身份定位会话再验内容」（boss-cli-notes 实测纪律：不要猜结构）。
 const { runBoss, LoginExpired, VerificationRequired, RiskControlError } = require("./boss");
@@ -37,6 +45,21 @@ function snippetOf(msg) {
   return String(msg || "").slice(0, SNIPPET_LEN);
 }
 
+// P2-1 防御（BUG-2026-11-05）：话术里的 & < > 在 JSON 串里是 &amp; &lt; &gt; 形式，
+// 纯原文 includes 会漏匹配（回查误判 not-delivered）。同时测原文与转义版，不猜回包结构。
+function escapeHtmlText(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function envelopeContains(envelope, snippet) {
+  const raw = JSON.stringify(envelope || {});
+  return raw.includes(snippet) || raw.includes(escapeHtmlText(snippet));
+}
+// greet.js 预检对 stringify 快照的同款匹配（haystack 已是字符串）
+function containsSnippet(haystack, snippet) {
+  const raw = String(haystack || "");
+  return raw.includes(snippet) || raw.includes(escapeHtmlText(snippet));
+}
+
 // 回查核实：返回 {verdict:"yes"|"no"|"unknown", lastCode}
 //   yes=沟通列表含话术 snippet（核实投递）；no=3 轮查询全部成功且都未匹配（核实未投递）；
 //   unknown=查询自身失败（预算/限流/异常），无法核实。红线错误码（登录失效/需验证/风控）上抛。
@@ -54,8 +77,11 @@ async function verifyDelivered(msg, { runBossFn, sleepFn, logger } = {}) {
     }
     budgetWait = null;
     try {
-      const r = run(["hr", "chat", "--page", "1", "--summary-limit", "100"], { timeoutMs: CHAT_TIMEOUT_MS, logger });
-      if (r && r.ok && r.envelope && JSON.stringify(r.envelope).includes(snippet)) {
+      // v2.15.0：summary-limit 必须为 0（单请求）——100 会触发逐会话补拉（≥3 次串行请求），
+      // 每次撞 30s 预算排队 → 第二个请求即 REQUEST_BUDGET_EXHAUSTED（BUG-2026-11-05 实证）。
+      // 列表页响应自带 last_msg（summary_source:"page"），文本匹配不受影响。
+      const r = run(["hr", "chat", "--page", "1", "--summary-limit", "0"], { timeoutMs: CHAT_TIMEOUT_MS, logger });
+      if (r && r.ok && r.envelope && envelopeContains(r.envelope, snippet)) {
         return { verdict: "yes", lastCode: "" };
       }
       if (r && r.ok) continue; // 查询成功但没匹配到 → 等下一轮（可能尚未落库）
@@ -76,10 +102,11 @@ async function verifyDelivered(msg, { runBossFn, sleepFn, logger } = {}) {
 // 发送前预检（防重复触达的硬保险，BUG-2026-11-03 修复建议④）：拉一次沟通列表全文。
 // best-effort：失败返回 null（预检弱化但不阻塞主流程——账本 pending 去重仍在，平台
 // 「首条招呼唯一性」是最后一道兜底，2026-11-03 实证两轮发送只送达 1 条）。
+// v2.15.0：同 verifyDelivered 改 --summary-limit 0（单请求，不撞预算；见文件头注）。
 function chatSnapshotText({ runBossFn, logger } = {}) {
   const run = runBossFn || ((args, opts) => runBoss(args, opts));
   try {
-    const r = run(["hr", "chat", "--page", "1", "--summary-limit", "100"], { timeoutMs: CHAT_TIMEOUT_MS, logger });
+    const r = run(["hr", "chat", "--page", "1", "--summary-limit", "0"], { timeoutMs: CHAT_TIMEOUT_MS, logger });
     return r && r.ok && r.envelope ? JSON.stringify(r.envelope) : null;
   } catch {
     return null;
@@ -94,6 +121,9 @@ module.exports = {
   SNIPPET_LEN,
   parseBudgetWait,
   snippetOf,
+  escapeHtmlText,
+  envelopeContains,
+  containsSnippet,
   verifyDelivered,
   chatSnapshotText,
 };

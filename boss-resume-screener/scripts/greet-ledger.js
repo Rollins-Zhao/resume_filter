@@ -11,11 +11,16 @@
 //   geeks 名单只增不减：想对同一人重新打招呼属人工决策（删条目/删文件），不做自动化重置。
 //   status（v2.12.0）："sent"=已核实送达（占额度）｜"unverified"=回执 ok 但回查失败（不占额度、
 //   命中去重阻断重发；下轮预检核实到会话则 chargeGreet 补记转 sent）。
+//   status（v2.15.0，BUG-2026-11-05）："already"=平台侧已记账（ALREADY_GREETED 幂等码，不占额度、
+//   不再重试——重发永远撞同一码）；"unverified" 加 6h TTL：超期后 hasGeek 视为未占用允许重试
+//   （假成功 unverified 若不设 TTL，当天内永久封锁；重试后平台已记账则撞幂等码补 already，
+//   未记账则真投递——两个方向都收敛）。
 const fs = require("fs");
 const path = require("path");
 
 const PLATFORM = "boss";
 const DEFAULT_GREET_CAP = 20; // 每日打招呼本地硬顶：账号平台额度约 200/日，自动化只占 1/10（feature-greet.md §5）
+const UNVERIFIED_TTL_MS = 6 * 60 * 60 * 1000; // unverified 去重占用上限：超 6h 允许重试（防假成功永久封锁）
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
@@ -61,8 +66,18 @@ function jobSentToday(dir, jobKey) {
   return Number(loadLedger(dir).perJob[jobKey]) || 0;
 }
 
+// v2.15.0（BUG-2026-11-05 P1-1）：unverified 条目 6h 内视为占用（阻断重发防重复触达），
+// 超期视为未占用（允许重试——重试结果两向收敛：平台已记账撞 ALREADY_GREETED 补 already，
+// 未记账则真投递）。at 缺失/非法（旧数据）按未超期处理（不误放重发）。sent/already 无 TTL。
 function hasGeek(dir, geekId) {
-  return !!geekId && !!loadLedger(dir).geeks[geekId];
+  if (!geekId) return false;
+  const e = loadLedger(dir).geeks[geekId];
+  if (!e) return false;
+  if (e.status === "unverified") {
+    const t = Date.parse(e.at || "");
+    if (Number.isFinite(t) && Date.now() - t > UNVERIFIED_TTL_MS) return false;
+  }
+  return true;
 }
 
 // 读取 geek 条目（greet.js 预检判断 pending/sent 用）；未收录返回 null
@@ -109,6 +124,24 @@ function markPending(dir, geekId, { jobId = "", name = "", msg = "", jobKey = ""
   return q;
 }
 
+// v2.15.0（BUG-2026-11-05 P0-2）：ALREADY_GREETED 幂等码落账——平台侧已记账「曾打过招呼」，
+// 记去重条目（status:"already"，**不占日发送额度**、不再重试——重发永远撞同一码）。
+// 已 sent 条目不降级；已 unverified/已存在的 already 条目按新信息刷新。写盘 fail-open 同上。
+function markAlready(dir, geekId, { jobId = "", name = "", msg = "", jobKey = "" } = {}) {
+  if (!geekId) return loadLedger(dir);
+  const q = loadLedger(dir);
+  if (q.geeks[geekId] && q.geeks[geekId].status === "sent") return q; // sent 不降级（首记优先）
+  q.updatedAt = new Date().toISOString();
+  q.geeks[geekId] = { at: new Date().toISOString(), jobId, name, jobKey, msg: String(msg || "").slice(0, 24), status: "already" };
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(greetLedgerPath(dir), JSON.stringify(q, null, 2));
+  } catch (e) {
+    console.warn(`[greet 账本] already 写盘失败（fail-open 继续运行）：${e.message}`);
+  }
+  return q;
+}
+
 function summarizeToday(dir, cap) {
   const q = loadLedger(dir);
   const jobs = Object.entries(q.perJob).filter(([, v]) => v > 0).map(([k, v]) => `${k} ${v}`).join("、");
@@ -119,6 +152,7 @@ function summarizeToday(dir, cap) {
 module.exports = {
   PLATFORM,
   DEFAULT_GREET_CAP,
+  UNVERIFIED_TTL_MS,
   todayKey,
   greetLedgerPath,
   resolveGreetCap,
@@ -130,5 +164,6 @@ module.exports = {
   geekEntry,
   chargeGreet,
   markPending,
+  markAlready,
   summarizeToday,
 };

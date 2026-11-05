@@ -1,11 +1,11 @@
 ---
 name: boss-resume-screener
-version: 2.14.0
+version: 2.15.0
 description: This skill should be used when bulk-screening candidates or resumes on BOSS直聘 (BOSS Zhipin / zhipin) recruiter platform — searching candidates by keyword groups via `boss hr candidates`, viewing structured resumes via `boss hr resume`, scoring them with the same customizable multi-dimension model as the Liepin skill, and generating a downloadable Excel recommendation report with per-job recommendation dedup (recommended-index.json keeps the same candidate from entering the report twice, skipped ones listed in a second worksheet; the report's BOSS简历 column links to the recruiter's search-results frame URL, keywords = surname+cleaned-company+title). It also covers the unified run.bat entry (platform menu, CDP detection, browser-kernel auto-install), boss-agent-cli (Python/uv) installation, version self-check, login-state recovery, quota discipline and circuit-breaker handling. Read-only by default; since v2.7.0 an explicit opt-in greet phase auto-sends first greetings only to S/A-grade candidates viewed this run, after the user enables settings.greet via two onboarding questions (first BOSS run or --setup-greet; geek-level global dedup, 20/day local cap); it never auto-sends replies, messages, resume requests or contact-exchange requests. Triggers include BOSS筛选, BOSS直聘筛选, 用BOSS筛简历, boss-agent-cli, BOSS候选人推荐报告, BOSS推荐去重, 重复推荐, 已推荐过, 销售经理招聘, BOSS链接打不开.
 agent_created: true
 ---
 
-> 本文件 `version: 2.14.0`（对应发布包版本）。项目根会经 run.bat / `self-update.js` 自动升级（v2.13.0 起，查 GitHub Release）；本 skill 若被单独复制到 `~/.workbuddy/skills/` 等位置、版本低于项目根包内版本时，提醒用户从项目根复制刷新。
+> 本文件 `version: 2.15.0`（对应发布包版本）。项目根会经 run.bat / `self-update.js` 自动升级（v2.13.0 起，查 GitHub Release）；本 skill 若被单独复制到 `~/.workbuddy/skills/` 等位置、版本低于项目根包内版本时，提醒用户从项目根复制刷新。
 
 # BOSS直聘简历自动筛选（只读筛选 + 授权触达）
 
@@ -472,13 +472,16 @@ boss hr resume <geek_id> --job-id <job_id> --security-id <security_id>
 screener 浏览循环内（同一次浏览动作，配额不额外计费）
   ↓ Network.enable 挂监听（开弹层前——弹层打开瞬间发 geek/info/v2）
   ↓ iBossRoot.resume.newChatResumeViewer 开弹层（15s 未就绪清场重开一次）
-  ↓ 滚回顶 → 循环：Page.captureScreenshot（PNG，裁剪弹层矩形，不含会话列表）
-    → 滚轮推进一屏-20% 重叠（~1s/屏 阅读式节奏）→ 测 scrollH
-  ↓ 到底判定：高度连续 2 次不增长 且 屏数已覆盖内容高（高度仍在涨绝不停）
+  ↓ 滚回顶 → 循环：Page.captureScreenshot（PNG，裁剪弹层矩形每张重算，不含会话列表）
+    → 滚轮推进 45% 视口×2 次小滚（~1.2s/屏 阅读式节奏 + 重绘就绪探测）→ 测 .resume-detail
+  ↓ 到底判定（v2.15.0 双保险）：真实滚动位置 scrollTop+clientH 覆盖 scrollH，或高度连续 2 次
+    不增长且屏数已覆盖（高度仍在涨绝不停）；连续同帧滚动未推进=到底收尾、滚动推进却同帧=中止
   ↓ 回收 geek/info/v2 的 zpData.jobCompetitive（牛人分析器明文）→ 关弹层
   ↓ resumes/<id>.json 落盘 {images:[相对路径], text, bossInsight} → 图片在 data/扫描图/<id>-NN.png
     （text 默认由本机 RapidOCR 内联识别回填，见下；识别未过校验者 text 留空走 AI 转写兜底）
 ```
+
+**v2.15.0 节奏修正（`BUG-2026-11-05-boss-简历弹层跳动与重绘错位.md`，workbuddy 真机合成器录屏 + 逐帧字节实证）**：用户可见的「弹层一格一格跳、内容压扁在顶部一条+下方空白」是 canvas 自上而下异步**重绘中间态**（落盘图未受损，+100ms 即稳定），但慢机器/窗口被遮挡时可能拍到空白条。四修：① 步长 80%→45% 视口且单步拆 2 次滚轮（重绘面积减半，接近逐段阅读；上限 24→48 屏承接张数增多）；② 固定 sleep 之外加**重绘就绪探测**（低质 JPEG 字节稳定判定，不稳才多等 ≤1.5s）；③ 到底判定升级为读真正滚动容器 `.resume-detail`（旧版读 iframe 文档 scrollTop 恒 0，只能靠高度收敛+屏数推断——平台改版/懒加载变化时会静默拍同屏、OCR 后缺正文不报错）；④ 重复帧防护（滚动推进却同帧=滚动假象/重绘卡死，中止；未推进同帧=到底收尾）+ 截图裁剪矩形每张重算。附带：`fetch-text.js` 的 GEO_JS 不再滚动主页面（旧 `window.scrollBy` 是"整个沟通页跳一下"的来源），复位副作用收敛到弹层容器内。
 
 **转写主通道（v2.10.0 同轮拍板）：本机 RapidOCR 内联识别（零 token、纯本地）**。screener 截图完成后立即 spawn `uv run --with rapidocr-onnxruntime`（`scripts/ocr-local.py`）逐图识别 → `scripts/ocr-local.js` 剥 UI 杂线/截断平台免责声明 → **三层去重组装**（头块剥离=滚轮未推进的整屏重拍块，容错变体行=长行包含关系；边界尾-头精确拼接；≥20 字长行首现去重——2026-10-30 真机 11 份实证滚轮振荡重拍普遍存在，三层组装后内容行重复≈0，残余行重复均为简历自然短词）→ `validateText` 校验（≥120 字符、含章节标记、≤20000）通过即直接回填 `text` ——**快速档筛完直接打分出报告，无转写断点**。首次运行 uv 自动装依赖+模型（~1-2 分钟一次），此后 ~5s/图。`BOSS_OCR=0` 可关断（或 uv/依赖不可用时自动降级）。
 
@@ -555,6 +558,19 @@ node screener.js rescore        # 重算评分（未转写者保持 0/C）
   命中去重阻断重发，存话术前 24 字供下轮匹配）；④ 回查匹配 snippet 12→24 字。新节奏预期：单人
   发送→核实典型 ≈ 1 分钟、最坏 ≈ 2.5-4 分钟。**遗留**：`hr chat` 回包结构无存档样本，匹配仍是列表全文含 snippet（同模板
   同 dim 组合撞词局限），下次真机存样本后升级为按 geek 身份定位。
+- **v2.15.0 假成功三件套（`BUG-2026-11-05-boss-greet-假成功与核实失效.md`，workbuddy 真机全链路实证）**：
+  旧会话（Cookie 被平台轮换后）下发送回执 `ok:true` 但平台**静默丢弃**消息；同时回查用
+  `--summary-limit 100`（逐会话补拉，一次回查 ≥3 次串行请求）必然撞穿 CLI 30s 请求预算 →
+  三轮全 `REQUEST_BUDGET_EXHAUSTED` → 恒 UNVERIFIED 且无法自证。**重新扫码后同链路立即投递成功**
+  （代码路径无错，是「会话失效」+「核实失效」叠加）。修复：① **回查单请求**（`--summary-limit 0`——
+  列表响应自带 `last_msg`，补拉完全没必要，1 次请求即出结果）；② **识别幂等码 `ALREADY_GREETED`**
+  （平台侧已记账）：裁决 `already`——不重试（重发永远撞同一码）、不占额度、落账本 `markAlready`，
+  报告标「平台已招呼(无会话请人工确认)」；③ **NOT_DELIVERED（回查成功但无会话=假成功铁证）首人
+  即中止整轮**并提示重新扫码（旧会话下连续跑会产出一串假成功）；④ 账本 `unverified` 加 **6h TTL**
+  （超期允许重试——重试两向收敛：平台已记账撞幂等码补 already，未记账则真投递；堵「假成功永久
+  封锁」）；⑤ 回查/预检匹配同时测原文与 HTML 转义版（话术含 `&` 时 JSON 串里是 `&amp;`，纯
+  includes 会漏）。**排查纪律**：`boss status` 报缺 `__zp_stoken__`（auth_state=partial/degraded）
+  是**过时检查的误报**——重新扫码后仍缺失但发送正常，别按 degraded 反复重登（反复重登招致风控）。
 
 - **授权（机器强制，不靠 AI 自觉）**：`profiles/_user.json` 的
   `settings.greet = { enabled, mode:"job"|"fixed", fixedText, askedAt, updatedAt }`。

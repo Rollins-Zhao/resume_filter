@@ -161,9 +161,16 @@ function openPopupJs(geekId, jobId, securityId) {
 }
 
 // 弹层/画布几何（canvas 坐标换算到主页面视口坐标系，供 Input 派发用）。
-// 附带滚动复位：弹层容器若停在上次拖选残留的滚动位置，起拖点会错位、只选中尾部片段
+// 附带滚动复位（可关）：弹层容器若停在上次拖选残留的滚动位置，起拖点会错位、只选中尾部片段
 //（2026-10-26 真机实测：残留滚动下 197 字符尾部片段 vs 复位后 2297 字符全文）。
-const GEO_JS = `(function(){
+// v2.15.0（BUG-2026-11-05 P1-1）两处副作用收敛：
+//   ① 复位改为可选（geoJs(false)）：滚动现在真写 .resume-detail.scrollTop——分段采集循环里
+//      每段测几何若照旧归零，会把每段打回顶部（旧版"虚拟滚动不写 scrollTop"下归零是无操作，
+//      平台改版后变成实害）；开弹层后的正式测量仍复位（默认 true）。
+//   ② 删除 window.scrollBy(主页面)——frRect.top<0 的成因是弹层容器内部滚动把 iframe 推到视口
+//      上方，滚整个沟通页是误伤（用户可见左侧会话列表整页跳动）；改为归零 .resume-detail
+//      （祖先链复位，与 ① 同一动作）后重测。
+const geoJs = (reset) => `(function(){
   var frs = document.querySelectorAll('iframe');
   var pending = 0;
   for (var i = 0; i < frs.length; i++) {
@@ -173,10 +180,12 @@ const GEO_JS = `(function(){
     if (!doc) return { err: 'iframe 不可访问' };
     var cv = doc.querySelector('canvas');
     if (!cv) return { err: 'iframe 内无 canvas' };
-    var el = fr, reset = 0;
-    while (el && el !== document.body) {
-      try { if (el.scrollHeight > el.clientHeight + 10 && el.scrollTop > 0) { el.scrollTop = 0; reset++; } } catch (e) {}
-      el = el.parentElement;
+    var el = fr, resetN = 0;
+    if (${reset ? "true" : "false"}) {
+      while (el && el !== document.body) {
+        try { if (el.scrollHeight > el.clientHeight + 10 && el.scrollTop > 0) { el.scrollTop = 0; resetN++; } } catch (e) {}
+        el = el.parentElement;
+      }
     }
     var r = cv.getBoundingClientRect();
     var frRect = fr.getBoundingClientRect();
@@ -187,9 +196,16 @@ const GEO_JS = `(function(){
     // ⚠️ 2026-10-27 真机实证：弹层内容被滚动过时 iframe 会跑到视口上方（实测 top=-607），
     //    此时起拖点 y 为负 → 鼠标事件落在可视区外 → 选区为空、Ctrl+C 不覆盖剪贴板
     //    （表现为"取文失败：剪贴板正文不完整"且内容还是用户原来的剪贴板）。
-    //    这里把窗口滚回去让画布顶部回到视口内，再重新测量一次。
+    //    v2.15.0：成因 = 弹层滚动容器（.resume-detail 祖先链）内部滚动——归零它（与复位同一
+    //    动作，reset=false 时此处也做一次按需归零：起拖点在视口外比"跳一下"更致命）后重测，
+    //    不再滚动整个主页面（window.scrollBy 误伤沟通页，BUG-2026-11-05 附带发现②）。
     if (frRect.top < 0) {
-      try { window.scrollBy(0, frRect.top); } catch (e) {}
+      var el2 = fr, r2 = 0;
+      while (el2 && el2 !== document.body) {
+        try { if (el2.scrollHeight > el2.clientHeight + 10 && el2.scrollTop > 0) { el2.scrollTop = 0; r2++; } } catch (e) {}
+        el2 = el2.parentElement;
+      }
+      resetN += r2;
       frRect = fr.getBoundingClientRect();
     }
     return {
@@ -209,11 +225,13 @@ const GEO_JS = `(function(){
         try { if (doc.body && doc.body.scrollHeight > m) m = doc.body.scrollHeight; } catch (e) {}
         return m;
       })())),
-      reset: reset
+      reset: resetN
     };
   }
   return { err: pending ? '画布尺寸为 0（弹层未完成布局）' : '未找到 c-resume iframe' };
 })()`;
+// 默认带复位（开弹层后的正式测量用）；滚动中途/分段循环用 geoJs(false)。
+const GEO_JS = geoJs(true);
 
 const DIALOG_JS = `(document.querySelectorAll('.new-chat-resume-dialog-main-ui').length > 0)`;
 
@@ -331,7 +349,17 @@ function mergeSegments(segments) {
 }
 
 // 测高脚本（⚠ 与 GEO_JS 不同：**不复位滚动**）——预热/分段定位用。
+// v2.15.0（BUG-2026-11-05 P0-3，正确性）：旧版读 iframe 文档的 scrollingElement——实测真正
+// 滚动的是外层 .resume-detail（iframe 文档 scrollTop 恒 0、scrollHeight=简历全高），旧读法
+// 拿不到真实滚动位置，「到底」只能靠高度收敛+屏数推断；平台若改容器内滚动/懒加载高度变化，
+// 会继续拍同一屏而 OCR 去重后正文变短却不报错（静默丢内容）。改为优先读 .resume-detail
+//（BOSS 当前结构），回退 iframe 文档（改版容错），多返回 clientH 供到底判定
+// scrollTop+clientH>=scrollH-2。弹层消失时 .resume-detail 与 iframe 皆不可得 → err（调用方中止）。
 const MEASURE_JS = `(function(){
+  var sc = document.querySelector('.resume-detail');
+  if (sc && sc.scrollHeight > 10) {
+    return { scrollH: sc.scrollHeight, scrollTop: sc.scrollTop, clientH: sc.clientHeight };
+  }
   var frs = document.querySelectorAll('iframe');
   for (var i = 0; i < frs.length; i++) {
     var fr = frs[i];
@@ -339,7 +367,7 @@ const MEASURE_JS = `(function(){
     var doc = fr.contentDocument;
     if (!doc) return { err: 'iframe 不可访问' };
     var se = doc.scrollingElement || doc.documentElement || doc.body;
-    return { scrollH: se ? se.scrollHeight : 0, scrollTop: se ? se.scrollTop : 0 };
+    return { scrollH: se ? se.scrollHeight : 0, scrollTop: se ? se.scrollTop : 0, clientH: se ? se.clientHeight : 0 };
   }
   return { err: '未找到 c-resume iframe' };
 })()`;
@@ -472,7 +500,9 @@ async function fetchResumeText({ geekId, jobId, securityId, logger = null, note 
       const SEG_CAP = 8;
       const segs = [];
       for (let seg = 0; seg < SEG_CAP; seg++) {
-        const g = await ev(GEO_JS);
+        // v2.15.0：分段循环测几何不复位（geoJs(false)）——滚动真写 .resume-detail.scrollTop 后，
+        // 照旧归零会把每段打回顶部（BUG-2026-11-05 P1-1；旧版"虚拟滚动不写 scrollTop"下是无操作）。
+        const g = await ev(geoJs(false));
         if (g && g.err) throw new FatalError(`简历弹层几何不可用（${g.err}），中止`);
         // 视口内短拖选：按下 → 拉到本视口底部 → 释放（不边选边滚，避开重绘打断选区）
         const yTop = Math.max(1, g.topY + 6);
@@ -679,7 +709,8 @@ async function ensureChatTab({ logger = null, note = (s) => console.log(s) } = {
 // 被平台权限拦截，2026-10-28 证伪）；旧数据 favorites.json 留档不读不写。S/A 触达见 greet.js。
 
 // v2.10.0：S1 截图采集器（shot-capture.js）复用的构件在此导出——同 skill 内复用不算跨目录 require。
+// v2.15.0：geoJs(reset) —— GEO_JS 的参数化生成器（滚动复位可关，见其头注）。
 module.exports = {
   fetchResumeText, extractFromOpenPopup, ensureChatTab, assertInputResponsive, mergeSegments,
-  openPopupJs, GEO_JS, MEASURE_JS, DIALOG_JS, closePopupIfOpen, waitForCanvas, attachChatPage,
+  openPopupJs, geoJs, GEO_JS, MEASURE_JS, DIALOG_JS, closePopupIfOpen, waitForCanvas, attachChatPage,
 };
