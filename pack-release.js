@@ -233,7 +233,11 @@ const NAME = "resume-screener";
 // 2.15.2 = 装机收尾契约修订（2026-11-05 用户拍板）：AI 在场时不引导用户双击 run.bat——AI 直接在
 //         对话里问背景四项建档、用户说出招聘需求即按 SKILL.md 开跑（README「一句话装机」指引 +
 //         AI-GUIDE 四同步修订，契约层五目标已刷新）；run.bat 收窄为无 AI 助手场景入口。纯文档改动。
-const DEFAULT_VERSION = "2.15.2";
+// 2.15.3 = 开工问询形式统一（2026-11-05 用户拍板）：契约新增 AI-GUIDE「二·五」——背景四项/补充问/
+//         评估方式/BOSS 来源/greet 两问一律优先用平台结构化选择题组件弹窗呈现（Claude Code=
+//         AskUserQuestion；无该组件才降级正文逐字问询），含弹窗编排与选项逐字映射（成本仍嵌在选项
+//         自身）；两侧 SKILL.md 第 0 步同步。修复「同一条问询有时弹窗、有时正文长文」的形式随机。
+const DEFAULT_VERSION = "2.15.3";
 const VERSION = (() => {
   const i = process.argv.indexOf("--version");
   if (i === -1) return DEFAULT_VERSION;
