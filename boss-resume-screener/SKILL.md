@@ -1,11 +1,11 @@
 ---
 name: boss-resume-screener
-version: 2.15.1
+version: 2.15.2
 description: This skill should be used when bulk-screening candidates or resumes on BOSS直聘 (BOSS Zhipin / zhipin) recruiter platform — searching candidates by keyword groups via `boss hr candidates`, viewing structured resumes via `boss hr resume`, scoring them with the same customizable multi-dimension model as the Liepin skill, and generating a downloadable Excel recommendation report with per-job recommendation dedup (recommended-index.json keeps the same candidate from entering the report twice, skipped ones listed in a second worksheet; the report's BOSS简历 column links to the recruiter's search-results frame URL, keywords = surname+cleaned-company+title). It also covers the unified run.bat entry (platform menu, CDP detection, browser-kernel auto-install), boss-agent-cli (Python/uv) installation, version self-check, login-state recovery, quota discipline and circuit-breaker handling. Read-only by default; since v2.7.0 an explicit opt-in greet phase auto-sends first greetings only to S/A-grade candidates viewed this run, after the user enables settings.greet via two onboarding questions (first BOSS run or --setup-greet; geek-level global dedup, 20/day local cap); it never auto-sends replies, messages, resume requests or contact-exchange requests. Triggers include BOSS筛选, BOSS直聘筛选, 用BOSS筛简历, boss-agent-cli, BOSS候选人推荐报告, BOSS推荐去重, 重复推荐, 已推荐过, 销售经理招聘, BOSS链接打不开.
 agent_created: true
 ---
 
-> 本文件 `version: 2.15.1`（对应发布包版本）。项目根会经 run.bat / `self-update.js` 自动升级（v2.13.0 起，查 GitHub Release）；本 skill 若被单独复制到 `~/.workbuddy/skills/` 等位置、版本低于项目根包内版本时，提醒用户从项目根复制刷新。
+> 本文件 `version: 2.15.2`（对应发布包版本）。项目根会经 run.bat / `self-update.js` 自动升级（v2.13.0 起，查 GitHub Release）；本 skill 若被单独复制到 `~/.workbuddy/skills/` 等位置、版本低于项目根包内版本时，提醒用户从项目根复制刷新。
 
 # BOSS直聘简历自动筛选（只读筛选 + 授权触达）
 

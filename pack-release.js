@@ -230,7 +230,10 @@ const NAME = "resume-screener";
 //         平台侧不可见（本地图形行为，不构成自动化识别信号），45% 小步长只会使张数/OCR 耗时翻倍——
 //         恢复 v2.10.0 起 11 份真机验证的 80% 视口单滚轮；v2.15.0 的正确性修复（重绘就绪探测/真实
 //         到底判定/重复帧防护/clip 每张重算/GEO_JS 副作用收敛）与观感无关，全部保留。
-const DEFAULT_VERSION = "2.15.1";
+// 2.15.2 = 装机收尾契约修订（2026-11-05 用户拍板）：AI 在场时不引导用户双击 run.bat——AI 直接在
+//         对话里问背景四项建档、用户说出招聘需求即按 SKILL.md 开跑（README「一句话装机」指引 +
+//         AI-GUIDE 四同步修订，契约层五目标已刷新）；run.bat 收窄为无 AI 助手场景入口。纯文档改动。
+const DEFAULT_VERSION = "2.15.2";
 const VERSION = (() => {
   const i = process.argv.indexOf("--version");
   if (i === -1) return DEFAULT_VERSION;
