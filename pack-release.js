@@ -199,7 +199,12 @@ const NAME = "resume-screener";
 //         三资产，token 读 .env github_token）；③install.bat 引导安装器（新同事放进空文件夹双击即装）；
 //         ④run.bat 启动接线（run.bat 写 .new 延迟生效，规避 cmd 改运行中批处理的错位坑）；⑤洗掉历史
 //         版本注释里的真实候选人姓名（此前随每次分发包外泄，本次一并纠正）。
-const DEFAULT_VERSION = "2.13.0";
+// 2.13.1 = 一句话装机/升级（2026-11-05 用户提出「请拉取XXX开源项目」）：README 顶部新增「一句话装机」
+//         节——给人复制的话术 + 给冷启动 AI 的执行指引（先问装过没有→装过=zip 覆盖解压原文件夹（用户
+//         数据目录不在 zip 内）/没装过=新文件夹→curl 稳定地址下载→Expand-Archive 或 System32 tar 解压
+//         （注明 git-bash GNU tar 不认 zip）→doctor.js --json 装依赖→引导扫码→告知此后全自动更新）；
+//         AI-GUIDE「四」加装机话术行。纯文档级：存量同事的「最后一次手动 zip」也收敛为一句话。
+const DEFAULT_VERSION = "2.13.1";
 const VERSION = (() => {
   const i = process.argv.indexOf("--version");
   if (i === -1) return DEFAULT_VERSION;

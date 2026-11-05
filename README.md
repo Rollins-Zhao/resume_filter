@@ -5,6 +5,28 @@
 
 适合 HR / 招聘负责人。可以纯双击使用（不需要懂任何技术）；配合能读写文件的 AI 助手（WorkBuddy / 豆包 / Claude Code 类）体验更佳。
 
+## 一句话装机 / 升级（推荐，配合 WorkBuddy / 豆包等 AI 助手）
+
+在 AI 对话里直接说这句（**复制发给同事即可**——新同事、旧版本升级、换电脑都适用）：
+
+> 请拉取并安装 GitHub 开源项目 Rollins-Zhao/resume_filter（猎聘+BOSS简历筛选工具），装好后告诉我怎么开始。
+
+**给 AI 的执行指引**（用户这样说时按本节操作，全程不需要 git）：
+
+1. 先问用户：**以前装过吗？装过的文件夹在哪**（有 `run.bat` 的那个文件夹）。
+   - **装过（升级）**：把下面下载的 zip **覆盖解压到原文件夹**——`profiles/_user.json`、`data/`、`reports/`、`logs/` 都不在 zip 里，用户数据不会被动到。
+   - **没装过（新装）**：新建一个专用文件夹（如 `D:\resume_filter`），解压到那里；以后所有数据都在这个文件夹。
+2. 下载最新发布包（约 0.4MB）：
+   `curl -L --retry 5 --retry-all-errors -o resume-screener-latest.zip https://github.com/Rollins-Zhao/resume_filter/releases/latest/download/resume-screener-latest.zip`
+3. 解压 zip 到目标文件夹（zip 内没有顶层文件夹，直接平铺）：优先 PowerShell
+   `Expand-Archive -LiteralPath 'resume-screener-latest.zip' -DestinationPath '<目标文件夹>' -Force`，
+   或 `C:\Windows\System32\tar.exe -xf resume-screener-latest.zip -C "<目标文件夹>"`。注意：git-bash 里的 GNU tar 不认 zip，别用。
+4. 在目标文件夹跑 `node doctor.js --json` 自动装依赖（exceljs / liepin-cli / uv / boss-agent-cli / 浏览器内核，国内镜像优先，首次约 3-10 分钟）；`criticalReady=false` 就把 `userActions` 逐条转达给用户，处理完再继续。
+5. 引导用户：双击登录器扫码（猎聘 `liepin-login.bat`；BOSS `boss-edge-login.bat` 或 `boss-zhipin-login.bat`，**窗口保持开着**）→ 双击 `run.bat` 开始用。
+6. 告诉用户：以后**不用再装**——`run.bat` 每次启动自动升级到最新版（v2.13.0 起内置），日常什么都不用做。
+
+没有 AI 助手？双击 `install.bat`（新机器引导安装器），或到 [Release 页](https://github.com/Rollins-Zhao/resume_filter/releases/latest) 手动下载 zip 解压后走下面「三步开始」。
+
 ## 三步开始
 
 1. **双击 `setup.bat`** —— 一次性装依赖（首次约 3-10 分钟；只用猎聘的话，BOSS 部分可以跳过）
@@ -20,6 +42,8 @@
 **⚠️ 2026-10-29 状态：暂停中**。真机试水发现平台对搜索来源的自动打招呼会「假成功」——接口回执成功、沟通列表却查不到任何会话，消息根本没投出去。v2.7.1 已止血：搜索来源的候选人一律不自动发（报告标「未发(需手动)」，请用「BOSS简历」列链接手动联系）；今后任何发送都要回查沟通列表、核实到会话才算成功。恢复自动待病因定案（详见仓库 BUG-2026-10-29 文档）。
 
 **✅ 同日晚更新（v2.8.0–v2.8.2）：默认只用推荐牛人，自动打招呼免费上线。** 筛选**默认仅使用「推荐牛人」来源**（自动去重、已聊过的人跳过）——**推荐来源的 S/A 候选人自动打招呼免费且已实测送达**（平台对推荐开聊不收费）。第一次跑 BOSS 时工具会问你**用哪个来源**（仅推荐=免费 / 推荐+搜索 / 仅搜索），并提醒：**搜索来源的人打招呼要额外购买「搜索畅聊卡」**（按人头扣，约 ¥10+/人）——账号有畅聊卡的同事可以选双源，随时 `run.bat --setup-greet` 改。顺带：平台当天下线了旧简历接口，工具已改为「候选人卡片 + 弹层正文」新架构，取正文速度和质量不变；报告链接也改成了更好用的沟通页搜索入口（旧的直达链接卡片点不动，平台限制）。
+
+**🛠 v2.13.1（2026-11-05）：一句话装机/升级。** 新同事、旧版本升级、换电脑，都只需在 WorkBuddy/豆包等 AI 对话里说一句「请拉取并安装 GitHub 开源项目 Rollins-Zhao/resume_filter」——AI 按 README「一句话装机」节自动下载、解压（覆盖升级不动用户数据）、装依赖、引导扫码。不用再传压缩包，存量同事的最后一次手动覆盖也省了。
 
 **🛠 v2.13.0（2026-11-04）：自动更新 + GitHub 发布——再也不用手动传压缩包。** 工具本体搬上了 GitHub：每次双击 run.bat（以及 AI 开工环节）会自动检查最新版并就地升级，失败只提示一句、不卡流程；你的数据（岗位画像、简历缓存、报告）原样保留，永不触碰。给新同事装机：把很小的 `install.bat` 发给 TA，放进一个空文件夹双击，即自动下载安装最新版（或直接发 Release 页的 zip）。存量同事**最后一次**手动覆盖 v2.13.0 包，此后全部自动。
 

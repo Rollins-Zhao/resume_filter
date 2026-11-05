@@ -1,11 +1,11 @@
 ---
 name: liepin-resume-screener
-version: 2.13.0
+version: 2.13.1
 description: This skill should be used when bulk-screening candidates or resumes on 猎聘 (Liepin) recruiter platform — searching candidates by keyword groups, scoring them with a customizable multi-dimension model, deduplicating recommendations (same candidate enters the recommendation report only once per job), and generating a downloadable Excel recommendation report with direct resume links and suggested greeting scripts for manual outreach. It also covers liepin-cli installation, login-state recovery, quota discipline and circuit-breaker handling. Strictly read-only, human-outreach architecture: it never auto-sends greetings, messages, or contact-exchange requests. Triggers include 筛简历, 筛选候选人, 猎聘筛选, 候选人推荐报告, 简历直链, 简历去重, 推荐去重, 猎聘自动筛选.
 agent_created: true
 ---
 
-> 本文件 `version: 2.13.0`（对应发布包版本）。项目根会经 run.bat / `self-update.js` 自动升级（v2.13.0 起，查 GitHub Release）；本 skill 若被单独复制到 `~/.workbuddy/skills/` 等位置、版本低于项目根包内版本时，提醒用户从项目根复制刷新。
+> 本文件 `version: 2.13.1`（对应发布包版本）。项目根会经 run.bat / `self-update.js` 自动升级（v2.13.0 起，查 GitHub Release）；本 skill 若被单独复制到 `~/.workbuddy/skills/` 等位置、版本低于项目根包内版本时，提醒用户从项目根复制刷新。
 
 # 猎聘简历自动筛选（只读筛选 + 人工触达）
 
