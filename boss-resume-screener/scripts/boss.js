@@ -189,9 +189,32 @@ function runBoss(args, opts = {}) {
   return { ok: !!(envelope && envelope.ok), code, envelope, raw: stdout, exit, bin };
 }
 
+// ---------- 平台预筛参数透传（v2.14.0，仅搜索源 hr candidates） ----------
+// 画像 platformFilter（驼峰键）→ CLI 筛选参数。码值直传平台，本层不做任何翻译——
+// 铁律「未实证的编码一律不加」：已实证码表见 references/job-profile-guide.md（本科 203,203 /
+// 硕士 204,204 / 不限 -1,-1；年龄/薪资是明文区间如 25,35 / -1,3）。推荐源 hr recommendations
+// 只有 --job-id/--page，无筛选参数（CLI v3.2.0 帮助实证）——预筛仅对搜索源生效。
+function withPlatformFilter(args, pf = {}) {
+  const out = [...args];
+  const FLAGS = [
+    ["--degree", "degree"],
+    ["--age", "age"],
+    ["--experience", "experience"],
+    ["--salary", "salary"],
+    ["--school-level", "schoolLevel"],
+    ["--activeness", "activeness"],
+  ];
+  for (const [flag, key] of FLAGS) {
+    const v = pf && pf[key];
+    if (v !== undefined && v !== null && String(v).trim()) out.push(flag, String(v).trim());
+  }
+  return out;
+}
+
 module.exports = {
   runBoss,
   resolveBossBin,
+  withPlatformFilter,
   FatalError,
   LoginExpired,
   RateLimited,

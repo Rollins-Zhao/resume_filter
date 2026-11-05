@@ -276,7 +276,8 @@ const pick = (obj, keys) => {
       rtext,
       insight,
       age: f.age || "—",
-      degree: f.degree || "—",
+      // v2.14.0：学历缺失明示（BOSS 搜索卡 geekDegree 常缺，v2.10.0 实证）；硬筛不误剔未知者
+      degree: String(f.degree || "").trim() || "未知(缺失)",
       perf: perfFlag(rtext),
       risk: quantongRisk(rtext),
     };
@@ -293,7 +294,8 @@ const pick = (obj, keys) => {
         }
         if (RF.minDegree) {
           const need = DEGREE_RANK[RF.minDegree] ?? 3;
-          if ((DEGREE_RANK[String(e.degree).trim()] ?? 0) < need) why.push(`学历${e.degree}<${RF.minDegree}`);
+          // 学历未知不参与硬筛：宁保留人工判断，不误剔（v2.10.0 遗留缺口 v2.14.0 修复）
+          if (e.degree !== "未知(缺失)" && (DEGREE_RANK[String(e.degree).trim()] ?? 0) < need) why.push(`学历${e.degree}<${RF.minDegree}`);
         }
         if (RF.requireDimHits) {
           for (const [dim, labels] of Object.entries(RF.requireDimHits)) {

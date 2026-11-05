@@ -16,7 +16,8 @@
     "evaluationCriteria": "（可选，精细评估档用）自然语言评估标准，一段话讲清岗位要什么样的人、各维度看重什么、什么样的经历算强/弱。AI 会话精细评估时优先用它当标准（缺席则从 scoring 的 rules/weight 推导）。快速档（规则引擎）不读它",
     "allowDuplicateRecommendations": "推荐去重开关：false=同一候选人同一岗位只进一次推荐报告（默认）；true=每次报告都重复出现。也可用环境变量 SCREENER_ALLOW_DUPLICATES=1/0 临时切换",
     "dailyResumeQuota": "（可选）该岗位当天最多浏览多少份简历（默认不设，按 全局剩余÷岗位画像总数 均分；全局每平台每日 1000 份硬顶，超了自动跳过筛选只出报告）",
-    "reportFilters": "（可选，报告层硬筛）{ ageMax: 35, minDegree: '本科', requireDimHits: { 维度键: [必须命中的标签] } }",
+    "reportFilters": "（可选，报告层硬筛）{ ageMax: 35, minDegree: '本科', requireDimHits: { 维度键: [必须命中的标签] } }——学历未知(缺失)者不会被 minDegree 误剔，报告明示「未知(缺失)」留人工判断",
+    "bossFilters": "（可选，BOSS 平台预筛·仅搜索源生效）{ degree: '203,203', age: '25,35', experience: '-1,-1', salary: '-1,3' }——码值直传平台：学历已实证 本科=203,203 / 硕士=204,204 / 不限=-1,-1；年龄/薪资是明文区间（如 25,35 / -1,3）；经验 -3,-3=应届 / -1,-1=不限。入口预筛省浏览配额；推荐源无此机制（其卡片字段齐全）。未实证的编码不要填（核实法：boss hr candidates --help）",
     "_说明3": "工作时间窗口等全局设置在 profiles/_user.json 的 settings（如 settings.workingWindow，默认 08:00-20:00）；画像里写 workingWindow 无效（全局项强制回钉）"
   },
   "scoring": {

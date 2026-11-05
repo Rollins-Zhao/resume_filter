@@ -23,7 +23,7 @@ const fs = require("fs");
 const path = require("path");
 const cfg = require("./config");
 const { scoreResume } = require("./scoring");
-const { runBoss, FatalError, LoginExpired, RateLimited, VerificationRequired, RiskControlError, AUTH_CODES } = require("./boss");
+const { runBoss, withPlatformFilter, FatalError, LoginExpired, RateLimited, VerificationRequired, RiskControlError, AUTH_CODES } = require("./boss");
 const { fetchResumeText, ensureChatTab } = require("./fetch-text");
 const { captureResumeShots } = require("./shot-capture");
 const { runLocalOcr } = require("./ocr-local");
@@ -382,6 +382,15 @@ async function main() {
   }
 
   // 2. 搜索阶段：hr candidates（BOSS_SOURCE=reco 时跳过）
+  // v2.14.0 平台预筛：画像 bossFilters → hr candidates 筛选参数（学历/年龄/经验/薪资/学校档次/活跃度），
+  // 池子进来就筛对、省浏览配额。仅搜索源生效（hr recommendations 无筛选参数，CLI v3.2.0 帮助实证）；
+  // 码值直传平台不做翻译，已实证码表见 references/job-profile-guide.md（未实证的编码一律不加）。
+  const pfActive = Object.entries(cfg.bossFilters || {})
+    .filter(([, v]) => v !== undefined && v !== null && String(v).trim())
+    .map(([k, v]) => `${k}=${v}`);
+  if (SOURCE !== "reco" && pfActive.length) {
+    console.log(`[平台预筛] ${pfActive.join(" ")}（hr candidates 池子入口生效）`);
+  }
   const kwFilter = (process.env.KW_GROUPS || "")
     .split(",")
     .map((x) => x.trim())
@@ -408,12 +417,10 @@ async function main() {
 
     for (let page = 1; page <= pages; page++) {
       guardTick();
-      const args = ["hr", "candidates", g.kw, "--city", String(cfg.bossCityCode || "-2"), "--page", String(page)];
-      const F = cfg.bossFilters || {};
-      if (F.experience) args.push("--experience", F.experience);
-      if (F.degree) args.push("--degree", F.degree);
-      if (F.activeness) args.push("--activeness", F.activeness);
-      if (F.salary) args.push("--salary", F.salary);
+      const args = withPlatformFilter(
+        ["hr", "candidates", g.kw, "--city", String(cfg.bossCityCode || "-2"), "--page", String(page)],
+        cfg.bossFilters
+      );
 
       chargeQuota();
       let r;

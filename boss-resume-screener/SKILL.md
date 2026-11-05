@@ -1,11 +1,11 @@
 ---
 name: boss-resume-screener
-version: 2.13.3
+version: 2.14.0
 description: This skill should be used when bulk-screening candidates or resumes on BOSS直聘 (BOSS Zhipin / zhipin) recruiter platform — searching candidates by keyword groups via `boss hr candidates`, viewing structured resumes via `boss hr resume`, scoring them with the same customizable multi-dimension model as the Liepin skill, and generating a downloadable Excel recommendation report with per-job recommendation dedup (recommended-index.json keeps the same candidate from entering the report twice, skipped ones listed in a second worksheet; the report's BOSS简历 column links to the recruiter's search-results frame URL, keywords = surname+cleaned-company+title). It also covers the unified run.bat entry (platform menu, CDP detection, browser-kernel auto-install), boss-agent-cli (Python/uv) installation, version self-check, login-state recovery, quota discipline and circuit-breaker handling. Read-only by default; since v2.7.0 an explicit opt-in greet phase auto-sends first greetings only to S/A-grade candidates viewed this run, after the user enables settings.greet via two onboarding questions (first BOSS run or --setup-greet; geek-level global dedup, 20/day local cap); it never auto-sends replies, messages, resume requests or contact-exchange requests. Triggers include BOSS筛选, BOSS直聘筛选, 用BOSS筛简历, boss-agent-cli, BOSS候选人推荐报告, BOSS推荐去重, 重复推荐, 已推荐过, 销售经理招聘, BOSS链接打不开.
 agent_created: true
 ---
 
-> 本文件 `version: 2.13.3`（对应发布包版本）。项目根会经 run.bat / `self-update.js` 自动升级（v2.13.0 起，查 GitHub Release）；本 skill 若被单独复制到 `~/.workbuddy/skills/` 等位置、版本低于项目根包内版本时，提醒用户从项目根复制刷新。
+> 本文件 `version: 2.14.0`（对应发布包版本）。项目根会经 run.bat / `self-update.js` 自动升级（v2.13.0 起，查 GitHub Release）；本 skill 若被单独复制到 `~/.workbuddy/skills/` 等位置、版本低于项目根包内版本时，提醒用户从项目根复制刷新。
 
 # BOSS直聘简历自动筛选（只读筛选 + 授权触达）
 
@@ -304,10 +304,14 @@ BOSS 专属可选字段（写进画像 JSON 即可覆盖默认值）：
 | `bossCityCode` | 数字城市编码（想手动指定时才用） | `"101010100"`（北京） |
 | `cities` | **多城市数组**（统一入口 run.bat 逐城循环跑；不填则只用 `city` 单城） | `["北京", "上海"]` |
 | `allowDuplicateRecommendations` | 推荐去重开关（默认 `false`，详见「六·五」） | `false` |
-| `bossFilters.experience` | 经验要求 | `"-1,-1"`（不限） |
-| `bossFilters.degree` | 学历要求 | `"201,201"`（本科） |
+| `bossFilters.experience` | 经验要求 | `"-3,-3"`（应届）/ `"-1,-1"`（不限） |
+| `bossFilters.degree` | 学历要求 | `"203,203"`（本科）/ `"204,204"`（硕士）/ `"-1,-1"`（不限）——**只认实证码**（2026-10-21 真机对照）；其他码先 `boss hr candidates --help` 核实再用，未实证不填 |
+| `bossFilters.age` | 年龄范围（明文区间，v2.14.0 起透传） | `"25,35"` |
 | `bossFilters.activeness` | 活跃度 | `"2"` |
 | `bossFilters.salary` | 薪资范围 | `"-1,3"` |
+| `bossFilters.schoolLevel` | 学校档次（v2.14.0 起透传；码未实证，用时先核实） | `"1101"` |
+
+**平台预筛口径（v2.14.0）**：`bossFilters` 只在**搜索源**（hr candidates）生效——池子入口就筛对、省浏览配额；**推荐源（hr recommendations）没有筛选参数**（CLI v3.2.0 帮助实证），但其卡片字段齐全，报告层照常可用 `reportFilters.minDegree` 把关（学历未知者不误剔、明示「未知(缺失)」，v2.14.0 起）。入口预筛与出口硬筛可以并存：预筛省配额，出口兜住个别缺字段的卡。
 
 #### 用户背景档案（profiles/_user.json）——生成画像前必读
 

@@ -212,7 +212,14 @@ const NAME = "resume-screener";
 // 2.13.3 = 契约刷新时机修正（2.13.2 发布后 E2E 实证缺陷）：刷新只挂"升级成功后"时，旧版升上来的
 //         第一跳跑的还是旧 self-update 代码（无刷新逻辑）——永远赶不上。改为**每次运行**都刷
 //         （幂等、纯本地毫秒级、失败不阻塞），旧版机器下一次启动即补齐。
-const DEFAULT_VERSION = "2.13.3";
+// 2.14.0 = BOSS 平台预筛 + 学历缺失不误剔（2026-11-05 用户实证疑问「接口没有年龄和学历字段」引出）：
+//         ①画像 bossFilters → hr candidates 筛选参数透传重构为纯函数 withPlatformFilter（boss.js，可测）
+//           并补 age/schoolLevel 键 + 搜索启动打印预筛行；SKILL 码表纠偏（原"201,201（本科）"系照帮助
+//           示例臆标 → 实证 203,203 本科 / 204,204 硕士，2026-10-21 真机对照）——铁律「未实证的编码一律
+//           不加」；推荐源 hr recommendations 无筛选参数（CLI v3.2.0 帮助实证），文档写明不对称。
+//           ②两侧 report.js：学历缺失明示「未知(缺失)」且 minDegree 硬筛不误剔未知者（v2.10.0 遗留缺口：
+//           BOSS 搜索卡 geekDegree 缺失被当最低档错杀）。新增 tests/platform-prefilter.test.js 10 例。
+const DEFAULT_VERSION = "2.14.0";
 const VERSION = (() => {
   const i = process.argv.indexOf("--version");
   if (i === -1) return DEFAULT_VERSION;
