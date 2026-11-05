@@ -1,0 +1,10 @@
+{
+  "name": "resume-screener",
+  "version": "2.13.0",
+  "private": true,
+  "description": "猎聘 + BOSS直聘 简历筛选工具（搜索 → 打分 → Excel 推荐报告；BOSS 可选授权制自动打招呼）",
+  "dependencies": {
+    "@viyzhu/liepin-cli": "^0.2.10",
+    "exceljs": "^4.4.0"
+  }
+}

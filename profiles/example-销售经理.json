@@ -1,0 +1,184 @@
+{
+  "_说明": "示例画像（填好的完整示范，行业无关）。复制改名后按自己的岗位调整关键词与打分维度即可。跑通后可删除本文件。",
+  "jobTitle": "销售经理",
+  "project": "星野科技",
+  "city": "北京",
+  "cities": [
+    "北京",
+    "上海"
+  ],
+  "keywordGroups": [
+    {
+      "name": "组1-职能",
+      "kw": "销售经理 B2B"
+    },
+    {
+      "name": "组2-大客户",
+      "kw": "大客户销售"
+    },
+    {
+      "name": "组3-渠道",
+      "kw": "渠道销售"
+    },
+    {
+      "name": "组4-解决方案",
+      "kw": "解决方案销售"
+    }
+  ],
+  "searchLimit": 20,
+  "minReportGrade": "C",
+  "allowDuplicateRecommendations": false,
+  "scoring": {
+    "domain": {
+      "label": "销售领域",
+      "weight": 30,
+      "rules": [
+        {
+          "label": "大客户/B2B销售",
+          "keywords": [
+            "大客户",
+            "KA",
+            "B2B",
+            "To B",
+            "解决方案销售",
+            "企业客户",
+            "key account"
+          ],
+          "score": 15
+        },
+        {
+          "label": "渠道/代理销售",
+          "keywords": [
+            "渠道销售",
+            "经销商",
+            "代理商",
+            "渠道拓展",
+            "分销"
+          ],
+          "score": 10
+        }
+      ],
+      "combine": "sum-cap",
+      "other": 0
+    },
+    "performance": {
+      "label": "业绩表现",
+      "weight": 30,
+      "contextWords": [
+        "完成",
+        "达成",
+        "超额",
+        "实现",
+        "取得",
+        "业绩",
+        "销售额",
+        "回款",
+        "营收",
+        "增长"
+      ],
+      "rules": [
+        {
+          "label": "业绩突出",
+          "keywords": [
+            "超额完成",
+            "销冠",
+            "销售冠军",
+            "年度第一",
+            "排名第一",
+            "翻倍",
+            "120%",
+            "150%"
+          ],
+          "score": 18
+        },
+        {
+          "label": "业绩达标",
+          "keywords": [
+            "完成率",
+            "达成率",
+            "完成销售",
+            "达成销售",
+            "销售目标",
+            "回款目标"
+          ],
+          "score": 12
+        }
+      ],
+      "weakScore": 6,
+      "other": 0
+    },
+    "skills": {
+      "label": "核心技能",
+      "weight": 25,
+      "rules": [
+        {
+          "label": "客户开发与谈判",
+          "keywords": [
+            "新客户开发",
+            "客户开拓",
+            "商务谈判",
+            "谈判",
+            "签约",
+            "拓客",
+            "商机挖掘",
+            "陌拜"
+          ],
+          "score": 13
+        },
+        {
+          "label": "客户关系管理",
+          "keywords": [
+            "客户维护",
+            "客户关系",
+            "CRM",
+            "复购",
+            "客户成功",
+            "续约",
+            "售后服务"
+          ],
+          "score": 12
+        }
+      ],
+      "combine": "sum-cap",
+      "other": 0
+    },
+    "industry": {
+      "label": "行业背景",
+      "weight": 15,
+      "rules": [
+        {
+          "label": "B2B/企业服务",
+          "keywords": [
+            "SaaS",
+            "企业服务",
+            "软件",
+            "制造业",
+            "工业品",
+            "咨询服务",
+            "云计算"
+          ],
+          "score": 8
+        },
+        {
+          "label": "相关行业",
+          "keywords": [
+            "互联网",
+            "快消",
+            "零售",
+            "医疗",
+            "金融",
+            "教育"
+          ],
+          "score": 7
+        }
+      ],
+      "combine": "sum-cap",
+      "other": 0
+    }
+  },
+  "reportFilters": {
+    "ageMax": 38,
+    "minDegree": "大专"
+  },
+  "greetTemplate": "您好，看到您有{dim1}方面的{dim2}经验。我们是{company}，正在北京招聘销售经理，想和您进一步沟通，方便的话期待您的回复。"
+}

@@ -1,0 +1,41 @@
+# ===== 运行数据：含真实候选人信息，绝不入库 =====
+data/
+reports/
+logs/
+release/
+
+# ===== 浏览器内核解压残留（约 400MB，缺失时会自动下载安装）=====
+chrome-win64/
+
+# ===== 岗位画像：真实画像是业务数据，仅豁免模板与通用示例 =====
+profiles/*
+!profiles/_template.json
+!profiles/example-*.json
+
+# ===== Node =====
+node_modules/
+
+# ===== harness 会话记忆与本地环境残留 =====
+.workbuddy/
+.claude/
+AGENTS.md
+.cursorrules
+*.bak
+*.bak-*
+*.log
+recommended-index.corrupt-*.json
+
+# ===== 系统杂项 =====
+Thumbs.db
+.DS_Store
+
+# ===== 本机凭据（GitHub PAT 等）：绝不入库 =====
+.env
+
+# ===== harness 调试残留（页面快照可能含 PII）与开发台账 =====
+.playwright-mcp/
+.superpowers/
+
+# ===== 内部复盘/交接文档（含平台对抗细节，2026-11-05 用户拍板：仅留本机不入公开仓） =====
+BUG-*.md
+docs/

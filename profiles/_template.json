@@ -1,0 +1,61 @@
+{
+  "_说明": "岗位画像模板（存放于 skill 外部的 profiles/ 目录，一个岗位一个 JSON）。复制本文件改名，或用自然语言把岗位要求告诉 AI、由 AI 按此格式生成。留空的字段会沿用 skill 内 config.js 的默认值；公司名等信息可先在 profiles/_user.json（用户背景档案，双击 run.bat 首次会引导生成）里配一次，画像留空即自动沿用。字段写法示例见同目录 example-销售经理.json。",
+  "jobTitle": "（岗位名称，例：销售经理）",
+  "project": "（可选。公司/项目名，话术自称用；留空自动用 profiles/_user.json 的公司名，再留空用内置示例。写死可覆盖档案=多项目场景）",
+  "city": "（工作城市，搜索用，例：北京）",
+  "cities": ["（可选，多城市批量搜索；不填则只用上面的 city 单城）"],
+  "keywordGroups": [
+    { "name": "组1-职能", "kw": "（搜索关键词，空格分隔）" },
+    { "name": "组2-（意图）", "kw": "（搜索关键词）" }
+  ],
+  "searchLimit": 20,
+  "searchAge": "（可选，仅猎聘生效，如 20,40 表示 20-40 岁；不填则不限）",
+  "minReportGrade": "C",
+  "allowDuplicateRecommendations": false,
+  "_说明2": {
+    "evaluationCriteria": "（可选，精细评估档用）自然语言评估标准，一段话讲清岗位要什么样的人、各维度看重什么、什么样的经历算强/弱。AI 会话精细评估时优先用它当标准（缺席则从 scoring 的 rules/weight 推导）。快速档（规则引擎）不读它",
+    "allowDuplicateRecommendations": "推荐去重开关：false=同一候选人同一岗位只进一次推荐报告（默认）；true=每次报告都重复出现。也可用环境变量 SCREENER_ALLOW_DUPLICATES=1/0 临时切换",
+    "dailyResumeQuota": "（可选）该岗位当天最多浏览多少份简历（默认不设，按 全局剩余÷岗位画像总数 均分；全局每平台每日 1000 份硬顶，超了自动跳过筛选只出报告）",
+    "reportFilters": "（可选，报告层硬筛）{ ageMax: 35, minDegree: '本科', requireDimHits: { 维度键: [必须命中的标签] } }",
+    "_说明3": "工作时间窗口等全局设置在 profiles/_user.json 的 settings（如 settings.workingWindow，默认 08:00-20:00）；画像里写 workingWindow 无效（全局项强制回钉）"
+  },
+  "scoring": {
+    "dim1": {
+      "label": "（维度一名称，如：领域经验）",
+      "weight": 30,
+      "_说明": "上下文维度：规则关键词必须与 contextWords 中的词出现在同一句才算强命中，防泛泛提及误报；否则只给 weakScore",
+      "contextWords": ["（业务上下文词）"],
+      "rules": [
+        { "label": "（强标签）", "keywords": ["（关键词）"], "score": 18 },
+        { "label": "（次标签）", "keywords": ["（关键词）"], "score": 12 }
+      ],
+      "weakScore": 6
+    },
+    "dim2": {
+      "label": "（维度二名称）",
+      "weight": 30,
+      "_说明": "普通维度：按规则命中累加，封顶 weight",
+      "rules": [
+        { "label": "（标签）", "keywords": ["（关键词）"], "score": 10 },
+        { "label": "（备选）", "keywords": ["（关键词）"], "score": 5 }
+      ]
+    },
+    "dim3": {
+      "label": "（维度三名称）",
+      "weight": 25,
+      "rules": [
+        { "label": "（核心标签）", "keywords": ["（关键词）"], "score": 13 },
+        { "label": "（相关标签）", "keywords": ["（关键词）"], "score": 12 }
+      ]
+    },
+    "dim4": {
+      "label": "（维度四名称）",
+      "weight": 15,
+      "rules": [
+        { "label": "（标签）", "keywords": ["（关键词）"], "score": 8 },
+        { "label": "（备选）", "keywords": ["（关键词）"], "score": 7 }
+      ]
+    }
+  },
+  "greetTemplate": "您好，看到您有{dim1}方面的{dim2}经验。我们是{company}，正在（城市）招聘（岗位名），想和您进一步沟通，方便的话期待您的回复。"
+}

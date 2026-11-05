@@ -1,0 +1,8 @@
+{
+  "_说明": "AI 平台记忆文件注册表：键=平台别名，值=该平台 AI 会话自动读取的文件（相对项目根）。ai-guide-sync.js 把 AI-GUIDE.md 契约同步到这些文件（幂等合并，只动契约标记块）。新平台：node ai-guide-sync.js --add 别名=路径",
+  "workbuddy": ".workbuddy/memory/MEMORY.md",
+  "doubao": "AGENTS.md",
+  "claude": "CLAUDE.md",
+  "codex": "AGENTS.md",
+  "cursor": ".cursorrules"
+}

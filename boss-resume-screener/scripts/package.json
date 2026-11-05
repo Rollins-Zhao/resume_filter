@@ -1,0 +1,19 @@
+{
+  "name": "boss-resume-screener-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "description": "BOSS直聘自动筛选脚本（只读筛选 + 人工触达）。CLI 依赖 boss-agent-cli（Python/uv），本目录仅含编排脚本。",
+  "main": "screener.js",
+  "scripts": {
+    "screen": "node screener.js",
+    "rescore": "node screener.js rescore",
+    "search-only": "node screener.js search-only",
+    "report": "node report.js",
+    "scores": "node show-scores.js",
+    "check-update": "node check-cli-update.js",
+    "update": "node check-cli-update.js --update"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0"
+  }
+}
