@@ -554,6 +554,30 @@ if (process.argv.includes("--publish")) {
     const force = process.argv.includes("--force");
     console.log(`\n=== 发布到 GitHub：${REPO_SLUG} · v${VERSION} ===`);
 
+    // 发版前置校验（2026-11-05 实证教训：push 被死代理吞掉后 --publish 照发，tag 打在了旧提交上）：
+    // Release 会把 tag 打在**远端默认分支 HEAD** 上——必须与本地 HEAD 一致才继续。
+    // 无 .git 的链式包环境（同事机再打包）localHead 为空 → 跳过校验不阻塞。
+    const { spawnSync } = require("child_process");
+    const localHead = (() => {
+      try {
+        return spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8", cwd: ROOT }).stdout.trim();
+      } catch {
+        return "";
+      }
+    })();
+    if (localHead) {
+      let remoteHead = null;
+      try {
+        remoteHead = JSON.parse((await ghRequest("GET", "api.github.com", `/repos/${REPO_SLUG}/commits/main`)).body).sha;
+      } catch {
+        /* 网络问题走下面的 WARN */
+      }
+      if (remoteHead && localHead !== remoteHead) {
+        throw new Error(`本地 HEAD ${localHead.slice(0, 7)} ≠ 远端 main ${remoteHead.slice(0, 7)}：先 git push 成功再 --publish（否则 Release 的 tag 会打在旧提交上）。刚 push 过？等推送真正完成（走代理失败/直连超时都会静默卡住）。`);
+      }
+      if (!remoteHead) console.warn("[WARN] 读不到远端 main HEAD（网络），跳过一致性校验——请自行确认 push 已成功");
+    }
+
     // 1) 建 Release；422（tag 已有 Release）默认硬报错，--force 删同名资产后复用重传
     let rel;
     try {
