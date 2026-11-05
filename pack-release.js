@@ -242,7 +242,11 @@ const NAME = "resume-screener";
 //         「二·五」改为 workbuddy 点选卡片为第一目标；拿不准输出方式时降级正文但问询不得跳过/走默认；
 //         卡片不支持自由填写的开放题（背景四项）整体降级正文、选择题仍走卡片。机制级触发方式待实证
 //         （用户截图/追问 workbuddy）后再钉。
-const DEFAULT_VERSION = "2.15.4";
+// 2.15.5 = 开工问询弹窗机制钉到实证级（2026-11-05 用户取证）：workbuddy 选择题卡片与 Claude Code
+//         AskUserQuestion 同构（questions[]：question/header/multiSelect/options[](label+description)，
+//         卡片自带输入框）——契约「二·五」由行为级描述升级为机制级写明；真机首例已实证（workbuddy 按
+//         新契约弹「公司名确认」卡：记忆预填选项+输入框路径，与契约编排一致）。
+const DEFAULT_VERSION = "2.15.5";
 const VERSION = (() => {
   const i = process.argv.indexOf("--version");
   if (i === -1) return DEFAULT_VERSION;

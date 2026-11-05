@@ -1,11 +1,11 @@
 ---
 name: liepin-resume-screener
-version: 2.15.4
+version: 2.15.5
 description: This skill should be used when bulk-screening candidates or resumes on 猎聘 (Liepin) recruiter platform — searching candidates by keyword groups, scoring them with a customizable multi-dimension model, deduplicating recommendations (same candidate enters the recommendation report only once per job), and generating a downloadable Excel recommendation report with direct resume links and suggested greeting scripts for manual outreach. It also covers liepin-cli installation, login-state recovery, quota discipline and circuit-breaker handling. Strictly read-only, human-outreach architecture: it never auto-sends greetings, messages, or contact-exchange requests. Triggers include 筛简历, 筛选候选人, 猎聘筛选, 候选人推荐报告, 简历直链, 简历去重, 推荐去重, 猎聘自动筛选.
 agent_created: true
 ---
 
-> 本文件 `version: 2.15.4`（对应发布包版本）。项目根会经 run.bat / `self-update.js` 自动升级（v2.13.0 起，查 GitHub Release）；本 skill 若被单独复制到 `~/.workbuddy/skills/` 等位置、版本低于项目根包内版本时，提醒用户从项目根复制刷新。
+> 本文件 `version: 2.15.5`（对应发布包版本）。项目根会经 run.bat / `self-update.js` 自动升级（v2.13.0 起，查 GitHub Release）；本 skill 若被单独复制到 `~/.workbuddy/skills/` 等位置、版本低于项目根包内版本时，提醒用户从项目根复制刷新。
 
 # 猎聘简历自动筛选（只读筛选 + 人工触达）
 
@@ -48,7 +48,7 @@ AI 收到后的动作：
 0. **【硬性第一步，不允许跳过】生成画像前必须确认 `profiles/_user.json` 存在**（查找路径见「用户背景档案」节）；不存在 → 先问用户公司名/行业/业务方向/常用城市四项，**确认后写入档案**，再继续第 1 步。四项确认后可再问**一个可选补充问**（并入 `businessSummary`，见该节第 8 条）；平台自身记忆里已有用户背景时只能当**预填建议**、逐项确认后写入（第 9 条）。screener 启动时若打出"[提示] 尚未建立用户背景档案"，也按本步骤补建。
    **环境自检顺带（v2.10.0）**：同一开工环节先跑 `node doctor.js --json`（首次任务必做；能自动装的当场装，详见 AI-GUIDE「五」）——`criticalReady=false` 或本平台分组未 ✅ 时先按输出处理，不开跑。同一环节项目根存在 `self-update.js` 时先跑 `node self-update.js`（工具本体自更新，v2.13.0 起；失败单行提示不阻塞）。
    **评估档位顺带（v2.9.0，2026-10-30 补）**：同一开工环节检查 `settings.scoringPreference` 是否落档，没落档就问一次「简历评估方式：1 快速（默认——免费、速度快，关键词匹配，颗粒度较粗） 2 精细（AI 逐份读简历工作内容打分，更准并附匹配依据，消耗模型积分/token）」，选择写入档案（跳过/拒绝 → 写 "fast"，不再追问；措辞与 AI-GUIDE「二」一致）。**档案=精细时顺序强制**：screener → **llm-batch 精细评估（五·一节）** → report.js——未完成评估时 report 退出码 6 拒出报告（`SCREENER_FORCE_FAST=1` 单次降级）。
-   **问询形式（v2.15.4）**：上述开工问询（背景四项+可选补充问、评估档位）一律优先用你可用的结构化选择题卡片/弹窗呈现（主平台 workbuddy=让用户点选的选项卡片；Claude Code=`AskUserQuestion`；无该能力或拿不准才降级正文逐字问询，文案不变——但问询不得因此跳过/走默认）——编排与选项文案映射见 AI-GUIDE「二·五」（本 skill 单独外置、无 AI-GUIDE 时按同一原则：开放填空走卡片自定义输入、卡片不支持则降级正文，选择题按本节逐字文案做选项）。
+   **问询形式（v2.15.5）**：上述开工问询（背景四项+可选补充问、评估档位）一律用你的结构化问询工具发选择题卡片（主平台 workbuddy 与 Claude Code 的 `AskUserQuestion` 同构：`questions[]`，每题 `question`/`header`/`multiSelect`/`options[]`（`label`+`description`），卡片自带输入框——2026-11-05 实证；无该工具的平台才降级正文逐字问询，文案不变，但问询不得因此跳过/走默认）——编排与选项文案映射见 AI-GUIDE「二·五」（本 skill 单独外置、无 AI-GUIDE 时按同一原则：开放填空走卡片输入框、卡片不支持则降级正文，选择题按本节逐字文案做选项）。
 1. **用户只给岗位名** → 先跑 `node <skill>/scripts/joblist.js --json` 查已发布岗位（匹配规则：精确 → 唯一子串，与 run.js matchProfile 同款）：命中 → 用岗位字段（名称/城市/薪资）+ `_user.json` 背景 + `references/job-profile-guide.md` 起草画像，**列出要点等用户确认**再跑；未命中/多个 → 列出在招岗位让用户挑；列表拿不到（退出码 5）或为空 → 降级为下面的描述流程，不阻塞
 2. 按 `references/job-profile-guide.md` 生成 `<项目根>/profiles/<岗位名>.json`（skill 外部）
 3. 告知运行命令（或让用户直接双击项目根的 `run.bat`，见「统一入口 run.bat」节）

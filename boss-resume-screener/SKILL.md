@@ -1,11 +1,11 @@
 ---
 name: boss-resume-screener
-version: 2.15.4
+version: 2.15.5
 description: This skill should be used when bulk-screening candidates or resumes on BOSS直聘 (BOSS Zhipin / zhipin) recruiter platform — searching candidates by keyword groups via `boss hr candidates`, viewing structured resumes via `boss hr resume`, scoring them with the same customizable multi-dimension model as the Liepin skill, and generating a downloadable Excel recommendation report with per-job recommendation dedup (recommended-index.json keeps the same candidate from entering the report twice, skipped ones listed in a second worksheet; the report's BOSS简历 column links to the recruiter's search-results frame URL, keywords = surname+cleaned-company+title). It also covers the unified run.bat entry (platform menu, CDP detection, browser-kernel auto-install), boss-agent-cli (Python/uv) installation, version self-check, login-state recovery, quota discipline and circuit-breaker handling. Read-only by default; since v2.7.0 an explicit opt-in greet phase auto-sends first greetings only to S/A-grade candidates viewed this run, after the user enables settings.greet via two onboarding questions (first BOSS run or --setup-greet; geek-level global dedup, 20/day local cap); it never auto-sends replies, messages, resume requests or contact-exchange requests. Triggers include BOSS筛选, BOSS直聘筛选, 用BOSS筛简历, boss-agent-cli, BOSS候选人推荐报告, BOSS推荐去重, 重复推荐, 已推荐过, 销售经理招聘, BOSS链接打不开.
 agent_created: true
 ---
 
-> 本文件 `version: 2.15.4`（对应发布包版本）。项目根会经 run.bat / `self-update.js` 自动升级（v2.13.0 起，查 GitHub Release）；本 skill 若被单独复制到 `~/.workbuddy/skills/` 等位置、版本低于项目根包内版本时，提醒用户从项目根复制刷新。
+> 本文件 `version: 2.15.5`（对应发布包版本）。项目根会经 run.bat / `self-update.js` 自动升级（v2.13.0 起，查 GitHub Release）；本 skill 若被单独复制到 `~/.workbuddy/skills/` 等位置、版本低于项目根包内版本时，提醒用户从项目根复制刷新。
 
 # BOSS直聘简历自动筛选（只读筛选 + 授权触达）
 
@@ -106,7 +106,7 @@ AI 收到后的动作：
    **BOSS 任务顺带（v2.7.0，2026-10-29 补）**：同一开工环节检查 `settings.greet` 是否落档，没落档就按 AI-GUIDE「三·五」问一次「是否开启自动打招呼 + 话术来源」（拒绝也落档、不再追问）——AI 直接调脚本的路径不会触发 run.bat 的首问，不在这里问用户就永远没机会被问到。已开启时手动序列 = screener → **greet.js** → report.js。
    **评估档位顺带（v2.9.0，2026-10-30 补；v2.10.0 措辞更新）**：同一开工环节检查 `settings.scoringPreference` 是否落档，没落档就问一次「简历评估方式：1 快速（默认——免费、速度快，关键词规则打分，颗粒度较粗） 2 精细（AI 逐份读简历工作内容打分，更准并附匹配依据，消耗模型积分/token）」。**两档正文都由截图+本机 RapidOCR 自动识别（零 token）**；档位差异仅在评估深度——快速档筛完直接出报告，精细档多一步 AI 逐份精评（消耗模型积分）。选择写入档案（跳过/拒绝 → 写 "fast"，不再追问；措辞与 AI-GUIDE「二」一致）。**顺序强制**：screener（截图+OCR 内联）→（有个别 OCR 未过的份：ocr-batch 转写兜底 → rescore，见四·五节）→（精细档）**llm-batch 精细评估（五·一节）** → greet.js（已开启时）→ report.js——未完成转写 report 退出码 7、未完成评估退出码 6 拒出报告（`SCREENER_FORCE_FAST=1` 仅可单次降级精评，**转写无降级**）。
    **BOSS 来源必问（v2.9.1，2026-10-30 补）**：同一开工环节检查 `settings.bossSource` 是否落档，没落档就**必须问**（与 greet/评估档位同轮，不允许像 v2.9.0 实测那样「打印三选项后自行走默认」），**选项文案逐字**（成本嵌在选项里，禁止挪题干或概括）：① 仅推荐牛人（打招呼免费）② 推荐+搜索（搜索来源打招呼需消耗『搜索畅聊卡』，按人头扣 1–5 次、约 ¥10+/人）③ 仅搜索（打招呼需消耗『搜索畅聊卡』）。选择写入档案（跳过/拒绝 → 写 "reco"，不再追问）；env `BOSS_SOURCE` 显式指定时以 env 为准。
-   **问询形式（v2.15.4）**：上述开工问询（背景四项+可选补充问、评估档位、BOSS 来源、greet 两问）一律优先用你可用的结构化选择题卡片/弹窗呈现（主平台 workbuddy=让用户点选的选项卡片；Claude Code=`AskUserQuestion`；无该能力或拿不准才降级正文逐字问询，文案不变——但问询不得因此跳过/走默认）——编排与选项文案映射见 AI-GUIDE「二·五」（本 skill 单独外置、无 AI-GUIDE 时按同一原则：开放填空走卡片自定义输入、卡片不支持则降级正文，选择题按本节与 AI-GUIDE「三·五」逐字文案做选项）。
+   **问询形式（v2.15.5）**：上述开工问询（背景四项+可选补充问、评估档位、BOSS 来源、greet 两问）一律用你的结构化问询工具发选择题卡片（主平台 workbuddy 与 Claude Code 的 `AskUserQuestion` 同构：`questions[]`，每题 `question`/`header`/`multiSelect`/`options[]`（`label`+`description`），卡片自带输入框——2026-11-05 实证；无该工具的平台才降级正文逐字问询，文案不变，但问询不得因此跳过/走默认）——编排与选项文案映射见 AI-GUIDE「二·五」（本 skill 单独外置、无 AI-GUIDE 时按同一原则：开放填空走卡片输入框、卡片不支持则降级正文，选择题按本节与 AI-GUIDE「三·五」逐字文案做选项）。
 1. **用户只给岗位名** → 先跑 `node <skill>/scripts/joblist.js --json` 查已发布岗位（匹配：精确 → 唯一子串）：命中 → 用岗位字段（名称/城市/薪资）+ `_user.json` 背景 +画像指南起草画像，**列出要点等用户确认**再跑；未命中/多个 → 列出在招岗位让用户挑；列表拿不到（退出码 5，`hr jobs list` 输出未实测）或为空 → 降级为描述流程，不阻塞
 2. 按 `references/job-profile-guide.md`（可复用猎聘 skill 的同名文档）生成/复用 `<项目根>/profiles/<岗位名>.json`
 3. 告知运行方式（用户双击项目根 `run.bat` 优先；AI 会话内手动跑则**显式写明平台**，命令见第三节）
