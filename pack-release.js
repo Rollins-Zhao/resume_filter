@@ -204,7 +204,12 @@ const NAME = "resume-screener";
 //         数据目录不在 zip 内）/没装过=新文件夹→curl 稳定地址下载→Expand-Archive 或 System32 tar 解压
 //         （注明 git-bash GNU tar 不认 zip）→doctor.js --json 装依赖→引导扫码→告知此后全自动更新）；
 //         AI-GUIDE「四」加装机话术行。纯文档级：存量同事的「最后一次手动 zip」也收敛为一句话。
-const DEFAULT_VERSION = "2.13.1";
+// 2.13.2 = 契约层随更新刷新（2026-11-05 用户问「新对话会不会触发更新检查」时挖出的缺口）：.workbuddy/
+//         memory/MEMORY.md 等 ai-guide-sync 同步目标被打包排除、也不随 self-update 刷新——同事新对话
+//         自动加载的契约停留在装机版本，「五」的开工三命令等改进到不了位。修复：self-update.js 升级
+//         成功后自动 spawn `ai-guide-sync.js --all`（失败不阻塞）；README「一句话装机」AI 指引第 4 步
+//         补跑同款命令（覆盖升级旧文件夹时必须）。
+const DEFAULT_VERSION = "2.13.2";
 const VERSION = (() => {
   const i = process.argv.indexOf("--version");
   if (i === -1) return DEFAULT_VERSION;

@@ -108,6 +108,6 @@ node self-update.js                                       # 工具本体自更�
 ```
 
 - 升级失败（registry/PyPI 不可达）只提示、不阻塞；`LIEPIN_CLI_AUTOUPDATE=0` / `BOSS_CLI_AUTOUPDATE=0` 仅应急关断，不是常规路径。
-- **工具本体同样自动更新（v2.13.0 起）**：`node self-update.js` 查 GitHub Release 最新版并下载就地升级（run.bat 每次启动也自动跑）；失败单行提示不阻塞；`SCREENER_SELF_UPDATE=0` 仅应急关断。只升级代码文件，用户数据（profiles/_user.json、data/、reports/、.env）白名单防线永不触碰。
+- **工具本体同样自动更新（v2.13.0 起）**：`node self-update.js` 查 GitHub Release 最新版并下载就地升级（run.bat 每次启动也自动跑）；失败单行提示不阻塞；`SCREENER_SELF_UPDATE=0` 仅应急关断。只升级代码文件，用户数据（profiles/_user.json、data/、reports/、.env）白名单防线永不触碰；升级成功后自动跑 `ai-guide-sync.js --all` 刷新契约层（`.workbuddy/` 等同步目标不随 zip 走，v2.13.2 起——否则用户新对话自动加载的还是旧契约）。
 - Claude Code 会话已由 SessionStart hook 机器强制（每次新会话自动跑上面三条）；其他平台 AI 请把这三条命令当作会话开工第一步，**不要问用户要不要升级**。
 - 升级 liepin-cli 后必须 `liepin quit` 杀掉旧版拉起的常驻浏览器再重新登录，否则新代码配旧实例照旧。

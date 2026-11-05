@@ -379,6 +379,17 @@ async function main() {
     if (dry) return 10;
     const now = readLocalVersion(ROOT); // 应用后复核：package.json 是最后一个写的文件，读到新版本才算成功
     if (now !== latest.version) throw new Error(`应用后版本复核不符（期望 ${latest.version}，实际 ${now}）`);
+    // v2.13.2：契约层随更新刷新——.workbuddy/memory/MEMORY.md 等同步目标不随 zip 走（打包排除），
+    // 不刷新的话用户新对话自动加载的还是装机时旧契约（开工三命令等改进到不了位）。失败不阻塞。
+    try {
+      spawnSync(process.execPath, [path.join(ROOT, "ai-guide-sync.js"), "--all"], {
+        stdio: "ignore",
+        windowsHide: true,
+        timeout: 30000,
+      });
+    } catch {
+      /* 永不阻塞 */
+    }
     console.log(`[自更新] 已升级 v${local} → v${latest.version}（用户数据未动${fromBat ? "；run.bat 新版已在 run.bat.new 待生效" : ""}）`);
     return 11;
   } finally {
