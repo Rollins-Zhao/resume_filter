@@ -237,7 +237,12 @@ const NAME = "resume-screener";
 //         评估方式/BOSS 来源/greet 两问一律优先用平台结构化选择题组件弹窗呈现（Claude Code=
 //         AskUserQuestion；无该组件才降级正文逐字问询），含弹窗编排与选项逐字映射（成本仍嵌在选项
 //         自身）；两侧 SKILL.md 第 0 步同步。修复「同一条问询有时弹窗、有时正文长文」的形式随机。
-const DEFAULT_VERSION = "2.15.3";
+// 2.15.4 = 开工问询弹窗化的平台定位修正（2026-11-05 用户纠偏）：v2.15.3 把弹窗示例锚在 Claude Code
+//         （AskUserQuestion）——主平台实为 workbuddy（用户实测能弹点选式选项卡片，机制名未探明）。契约
+//         「二·五」改为 workbuddy 点选卡片为第一目标；拿不准输出方式时降级正文但问询不得跳过/走默认；
+//         卡片不支持自由填写的开放题（背景四项）整体降级正文、选择题仍走卡片。机制级触发方式待实证
+//         （用户截图/追问 workbuddy）后再钉。
+const DEFAULT_VERSION = "2.15.4";
 const VERSION = (() => {
   const i = process.argv.indexOf("--version");
   if (i === -1) return DEFAULT_VERSION;
