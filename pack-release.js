@@ -209,7 +209,10 @@ const NAME = "resume-screener";
 //         自动加载的契约停留在装机版本，「五」的开工三命令等改进到不了位。修复：self-update.js 升级
 //         成功后自动 spawn `ai-guide-sync.js --all`（失败不阻塞）；README「一句话装机」AI 指引第 4 步
 //         补跑同款命令（覆盖升级旧文件夹时必须）。
-const DEFAULT_VERSION = "2.13.2";
+// 2.13.3 = 契约刷新时机修正（2.13.2 发布后 E2E 实证缺陷）：刷新只挂"升级成功后"时，旧版升上来的
+//         第一跳跑的还是旧 self-update 代码（无刷新逻辑）——永远赶不上。改为**每次运行**都刷
+//         （幂等、纯本地毫秒级、失败不阻塞），旧版机器下一次启动即补齐。
+const DEFAULT_VERSION = "2.13.3";
 const VERSION = (() => {
   const i = process.argv.indexOf("--version");
   if (i === -1) return DEFAULT_VERSION;

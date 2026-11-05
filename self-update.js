@@ -348,6 +348,20 @@ async function main() {
 
   if (!fromBat) applyPendingBat(ROOT);
 
+  // 契约层刷新（v2.13.3 定稿：**每次运行**都刷，不依赖升级动作）——.workbuddy/memory/MEMORY.md 等
+  // ai-guide-sync 同步目标不随 zip 走（打包排除），旧版升上来的第一跳用的还是旧 self-update 代码，
+  // 只挂在"升级成功后"的话它们永远赶不上（2.13.2 的实证缺陷）；每次运行刷新则下一次启动即补齐。
+  // 幂等且纯本地（毫秒级），失败不阻塞。
+  try {
+    spawnSync(process.execPath, [path.join(ROOT, "ai-guide-sync.js"), "--all"], {
+      stdio: "ignore",
+      windowsHide: true,
+      timeout: 30000,
+    });
+  } catch {
+    /* 永不阻塞 */
+  }
+
   const local = readLocalVersion(ROOT);
   if (!local) {
     console.error("[自更新] 本地 package.json 缺失或损坏，跳过");
@@ -379,17 +393,6 @@ async function main() {
     if (dry) return 10;
     const now = readLocalVersion(ROOT); // 应用后复核：package.json 是最后一个写的文件，读到新版本才算成功
     if (now !== latest.version) throw new Error(`应用后版本复核不符（期望 ${latest.version}，实际 ${now}）`);
-    // v2.13.2：契约层随更新刷新——.workbuddy/memory/MEMORY.md 等同步目标不随 zip 走（打包排除），
-    // 不刷新的话用户新对话自动加载的还是装机时旧契约（开工三命令等改进到不了位）。失败不阻塞。
-    try {
-      spawnSync(process.execPath, [path.join(ROOT, "ai-guide-sync.js"), "--all"], {
-        stdio: "ignore",
-        windowsHide: true,
-        timeout: 30000,
-      });
-    } catch {
-      /* 永不阻塞 */
-    }
     console.log(`[自更新] 已升级 v${local} → v${latest.version}（用户数据未动${fromBat ? "；run.bat 新版已在 run.bat.new 待生效" : ""}）`);
     return 11;
   } finally {
